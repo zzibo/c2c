@@ -71,7 +71,7 @@ export function CafeSidebar({
         searchFilters.spacious !== null ||
         searchFilters.maxPriceLevel > 0;
     return (
-        <div className="absolute left-4 md:left-6 top-24 md:top-28 z-50 flex items-start gap-2">
+        <div className="absolute left-4 md:left-6 top-20 z-50 flex items-start gap-2">
             {/* Sidebar Panel */}
             <AnimatePresence>
                 {!isCollapsed && (
@@ -86,7 +86,7 @@ export function CafeSidebar({
                             damping: 30,
                             opacity: { duration: 0.2 }
                         }}
-                        className="bg-c2c-base/95 border-2 border-c2c-orange rounded-3xl shadow-2xl overflow-hidden max-h-[78vh] flex flex-col"
+                        className="bg-c2c-base/95 border-2 border-c2c-orange rounded-3xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
                     >
 
                         {/* Search Bar in Panel */}
