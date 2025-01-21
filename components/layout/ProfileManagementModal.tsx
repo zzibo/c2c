@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/Input';
 import { VibeSelection } from '@/components/onboarding/VibeSelection';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { updateProfile, checkUsernameAvailability, validateUsername } from '@/lib/auth';
+import { useUpdateVibes } from '@/hooks/useUpdateVibes';
 import type { VibeType } from '@/lib/supabase';
 
 interface ProfileManagementModalProps {
@@ -31,26 +32,31 @@ export function ProfileManagementModal({
   onClose,
 }: ProfileManagementModalProps) {
   const { user, profile, refreshProfile } = useAuth();
+  const updateVibesMutation = useUpdateVibes();
   const [activeTab, setActiveTab] = useState<TabType>('edit');
   
   // Edit profile state
   const [username, setUsername] = useState('');
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [isSavingVibes, setIsSavingVibes] = useState(false);
   const [selectedVibes, setSelectedVibes] = useState<VibeType[]>([]);
   
   // Submissions state
   const [submissions, setSubmissions] = useState<UserSubmission[]>([]);
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
 
-  // Initialize form with profile data
+  // Initialize form with profile data and sync when profile updates
   useEffect(() => {
     if (profile) {
       setUsername(profile.username || '');
-      setSelectedVibes(profile.metadata?.vibes || profile.metadata?.vibe ? [profile.metadata.vibe as VibeType] : []);
+      // Only update selectedVibes if not currently saving (to avoid overwriting optimistic update)
+      if (!updateVibesMutation.isPending) {
+        const profileVibes = profile.metadata?.vibes || 
+          (profile.metadata?.vibe ? [profile.metadata.vibe as VibeType] : []);
+        setSelectedVibes(profileVibes);
+      }
     }
-  }, [profile]);
+  }, [profile, updateVibesMutation.isPending]);
 
   // Fetch submissions when tab is active
   useEffect(() => {
@@ -116,16 +122,23 @@ export function ProfileManagementModal({
   const handleSaveVibes = async (vibes: VibeType[]) => {
     if (!user) return;
 
-    setIsSavingVibes(true);
-    try {
-      await updateProfile(user.id, { vibes });
-      await refreshProfile();
-      setSelectedVibes(vibes);
-    } catch (error) {
-      console.error('Error updating vibes:', error);
-    } finally {
-      setIsSavingVibes(false);
-    }
+    // Optimistically update local state immediately for instant UI feedback
+    setSelectedVibes(vibes);
+
+    // Use TanStack Query mutation with optimistic updates
+    updateVibesMutation.mutate(vibes, {
+      onSuccess: () => {
+        // Success - profile refreshed by mutation hook
+        // selectedVibes already updated optimistically
+      },
+      onError: (error) => {
+        // Error - rollback to previous vibes from profile
+        const previousVibes = profile?.metadata?.vibes || 
+          (profile?.metadata?.vibe ? [profile.metadata.vibe as VibeType] : []);
+        setSelectedVibes(previousVibes);
+        console.error('Error updating vibes:', error);
+      },
+    });
   };
 
   const getStatusBadge = (status: string) => {
@@ -208,7 +221,7 @@ export function ProfileManagementModal({
                 <VibeSelection
                   existingVibes={selectedVibes}
                   isEditing={true}
-                  isLoading={isSavingVibes}
+                  isLoading={updateVibesMutation.isPending}
                   onComplete={handleSaveVibes}
                 />
               </div>
