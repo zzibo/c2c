@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-server';
 
 // Geoapify Places API endpoint
 const GEOAPIFY_API_URL = 'https://api.geoapify.com/v2/places';
@@ -69,7 +69,10 @@ export async function GET(request: NextRequest) {
         ratings: {
           coffee: cafe.avg_coffee || 0,
           vibe: cafe.avg_vibe || 0,
-          infra: cafe.avg_wifi || 0,
+          wifi: cafe.avg_wifi || 0,
+          outlets: cafe.avg_outlets || 0,
+          seating: cafe.avg_seating || 0,
+          noise: cafe.avg_noise || 0,
           overall: cafe.avg_overall || 0,
         },
         totalReviews: cafe.rating_count || 0,
@@ -201,7 +204,10 @@ export async function GET(request: NextRequest) {
       ratings: {
         coffee: cafe.avg_coffee || 0,
         vibe: cafe.avg_vibe || 0,
-        infra: cafe.avg_wifi || 0,
+        wifi: cafe.avg_wifi || 0,
+        outlets: cafe.avg_outlets || 0,
+        seating: cafe.avg_seating || 0,
+        noise: cafe.avg_noise || 0,
         overall: cafe.avg_overall || 0,
       },
       totalReviews: cafe.rating_count || 0,
