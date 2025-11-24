@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import Map, { Marker, NavigationControl, GeolocateControl } from 'react-map-gl/mapbox';
 import Image from 'next/image';
-import { MapPin, Clock, Star, Phone, Globe, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MapPin, Star, ChevronLeft, ChevronRight } from 'lucide-react';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import type { Coordinate, Cafe } from '@/types/cafe';
+import StarRating from '@/components/ui/StarRating';
 
 interface MapViewProps {
   apiKey: string;
@@ -33,6 +34,7 @@ export default function MapView({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCafeId, setSelectedCafeId] = useState<string | null>(null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  const [expandedCafeId, setExpandedCafeId] = useState<string | null>(null);
 
   useEffect(() => {
     // Get user's current location
@@ -43,6 +45,7 @@ export default function MapView({
             lat: position.coords.latitude,
             lng: position.coords.longitude
           };
+          console.log('User location obtained:', coords);
           setUserLocation(coords);
           setViewState({
             longitude: coords.lng,
@@ -51,9 +54,35 @@ export default function MapView({
           });
         },
         (error) => {
-          console.error('Error getting user location:', error);
+          // Only log unexpected errors, not permission denied (common user choice)
+          if (error.code !== error.PERMISSION_DENIED) {
+            console.warn('Geolocation error:', error.message || 'Location unavailable');
+          }
+          let errorMessage = 'Unable to get your location. ';
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage += 'Please enable location access in your browser settings.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage += 'Location information is unavailable.';
+              break;
+            case error.TIMEOUT:
+              errorMessage += 'Location request timed out.';
+              break;
+            default:
+              errorMessage += 'An unknown error occurred.';
+          }
+          setSearchError(errorMessage);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
         }
       );
+    } else {
+      console.error('Geolocation is not supported by this browser.');
+      setSearchError('Geolocation is not supported by your browser.');
     }
   }, []);
 
@@ -195,14 +224,29 @@ export default function MapView({
     }
   };
 
-  // Handle cafe panel item click - center map on pin
+  // Handle cafe panel item click - center map on pin and toggle expansion
   const handleCafeClick = (cafe: Cafe) => {
+    // Toggle expansion
+    if (expandedCafeId === cafe.id) {
+      setExpandedCafeId(null);
+    } else {
+      setExpandedCafeId(cafe.id);
+    }
+
     setSelectedCafeId(cafe.id);
     setViewState({
       longitude: cafe.location.lng,
       latitude: cafe.location.lat,
       zoom: Math.max(viewState.zoom, 15)
     });
+
+    // Scroll panel item into view after a short delay to ensure DOM update
+    setTimeout(() => {
+      const itemRef = cafeItemRefs.current[cafe.id];
+      if (itemRef && panelRef.current && !isPanelCollapsed) {
+        itemRef.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 100);
   };
 
   // Handle pin click - scroll panel to cafe
@@ -251,10 +295,18 @@ export default function MapView({
   return (
     <div className="w-full h-full relative flex">
       {/* Left Panel */}
-      <div className={`${isPanelCollapsed ? 'w-0 min-w-0' : 'w-96'} flex-shrink-0 bg-pixel-beige border-r-4 border-pixel-text-dark flex flex-col transition-all duration-300 overflow-hidden relative z-30`}>
+      <div className={`${isPanelCollapsed ? 'w-0 min-w-0' : 'w-96'} flex-shrink-0 bg-amber-50 border-r-2 border-amber-900 flex flex-col transition-all duration-300 overflow-hidden relative z-30`}>
 
         {/* Search Bar in Panel */}
-        <div className={`p-4 border-b-4 border-pixel-text-dark ${isPanelCollapsed ? 'hidden' : ''}`}>
+        <div className={`p-4 border-b-2 border-amber-900 ${isPanelCollapsed ? 'hidden' : ''}`}>
+          {/* Location Status Indicator */}
+          {!userLocation && !searchError && (
+            <div className="mb-3 bg-blue-50 text-blue-700 px-3 py-2 rounded text-xs border border-blue-300 flex items-center gap-2">
+              <div className="animate-spin h-3 w-3 border-2 border-blue-700 border-t-transparent rounded-full"></div>
+              <span>Getting your location...</span>
+            </div>
+          )}
+
           <form onSubmit={handleSearchSubmit} className="mb-3">
             <div className="flex gap-2">
               <div className="flex-1 relative">
@@ -269,13 +321,12 @@ export default function MapView({
                     }
                   }}
                   placeholder="Search cafes..."
-                  className="w-full px-4 py-2 pl-10 shadow-pixel-sm bg-pixel-cream border-3 border-pixel-text-dark focus:outline-none focus:border-pixel-copper text-pixel-text-dark placeholder-pixel-brown text-sm font-mono"
-                  style={{ borderRadius: 0 }}
+                  className="w-full px-3 py-2 pl-9 bg-amber-100 border border-amber-700 rounded focus:outline-none focus:ring-2 focus:ring-amber-600 focus:border-transparent text-sm placeholder-amber-700 text-amber-900"
                   disabled={!userLocation || isSearching}
                 />
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-pixel-brown"
+                  className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-amber-700"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -287,10 +338,9 @@ export default function MapView({
                 type="submit"
                 onClick={handleSearchClick}
                 disabled={!userLocation || isSearching || !searchQuery.trim()}
-                className="bg-pixel-copper hover:bg-pixel-brown disabled:bg-pixel-brown disabled:pointer-events-none text-pixel-text-light font-pixel px-4 py-2 shadow-pixel-sm transition-all text-xs disabled:cursor-not-allowed"
-                style={{ borderRadius: 0 }}
+                className="bg-amber-700 hover:bg-amber-800 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-all text-sm font-medium"
               >
-                SEARCH
+                Search
               </button>
             </div>
           </form>
@@ -308,8 +358,7 @@ export default function MapView({
                 searchAroundMe();
               }}
               disabled={!userLocation || isSearching}
-              className="bg-pixel-copper hover:bg-pixel-brown disabled:bg-pixel-brown disabled:pointer-events-none text-pixel-text-light font-pixel px-4 py-2 shadow-pixel-sm transition-all text-xs disabled:cursor-not-allowed flex items-center gap-2 flex-1"
-              style={{ borderRadius: 0 }}
+              className="bg-amber-100 hover:bg-amber-200 disabled:opacity-50 disabled:cursor-not-allowed border border-amber-700 text-amber-900 px-4 py-2 rounded transition-all text-sm font-medium flex items-center gap-2 flex-1"
             >
               {isSearching ? (
                 <>
@@ -317,22 +366,19 @@ export default function MapView({
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  <span className="font-mono text-xs">SEARCHING...</span>
+                  <span className="text-sm">Searching...</span>
                 </>
               ) : (
                 <>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  <span className="font-mono text-xs">NEARBY (2MI)</span>
+                  <MapPin className="h-4 w-4" />
+                  <span className="text-sm">Nearby (2mi)</span>
                 </>
               )}
             </button>
 
             {/* Results count */}
             {cafes.length > 0 && (
-              <div className="bg-pixel-copper text-pixel-text-light px-3 py-2 shadow-pixel-sm text-xs font-pixel flex items-center" style={{ borderRadius: 0 }}>
+              <div className="bg-amber-700 text-white px-3 py-2 rounded text-sm font-medium flex items-center">
                 {cafes.length}
               </div>
             )}
@@ -340,7 +386,7 @@ export default function MapView({
 
           {/* Error message */}
           {searchError && (
-            <div className="mt-2 bg-pixel-copper text-pixel-text-light px-3 py-2 shadow-pixel-sm text-xs font-mono border-3 border-pixel-text-dark" style={{ borderRadius: 0 }}>
+            <div className="mt-2 bg-red-100 text-red-800 px-3 py-2 rounded text-sm border border-red-300">
               {searchError}
             </div>
           )}
@@ -362,83 +408,176 @@ export default function MapView({
                         cafeItemRefs.current[cafe.id] = el;
                       }}
                       onClick={() => handleCafeClick(cafe)}
-                      className={`p-4 cursor-pointer transition-all border-3 shadow-pixel-sm ${selectedCafeId === cafe.id
-                        ? 'border-pixel-copper bg-pixel-terracotta'
-                        : 'border-pixel-text-dark bg-pixel-cream hover:bg-pixel-beige'
+                      className={`p-3 cursor-pointer transition-all rounded border-2 ${selectedCafeId === cafe.id
+                        ? 'border-amber-700 bg-amber-100'
+                        : 'border-amber-300 bg-white hover:bg-amber-50'
                         }`}
-                      style={{ borderRadius: 0 }}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           {/* Cafe name and ranking */}
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-pixel text-pixel-brown w-6">
+                            <span className="text-xs text-amber-700 font-semibold w-6">
                               #{index + 1}
                             </span>
-                            <h3 className="text-sm font-pixel text-pixel-text-dark truncate">
-                              {cafe.name.toUpperCase()}
+                            <h3 className="text-sm font-semibold text-amber-900 truncate">
+                              {cafe.name}
                             </h3>
                           </div>
 
                           {/* Distance */}
-                          <div className="flex items-center gap-1 text-xs text-pixel-brown mb-2 font-mono">
-                            <MapPin size={12} className="text-pixel-copper" />
+                          <div className="flex items-center gap-1 text-xs text-amber-800 mb-2">
+                            <MapPin size={12} className="text-amber-700" />
                             <span>{formatDistance(cafe.distance)}</span>
                           </div>
 
                           {/* Address */}
                           {cafe.address && (
-                            <p className="text-xs text-pixel-brown mb-2 line-clamp-1 font-mono">
+                            <p className="text-xs text-amber-700 mb-2 line-clamp-1">
                               {cafe.address}
                             </p>
                           )}
 
-                          {/* Ratings */}
-                          {cafe.ratings.overall > 0 && (
-                            <div className="flex items-center gap-1 mb-2">
-                              <Star size={12} className="text-pixel-copper fill-pixel-copper" />
-                              <span className="text-xs font-mono font-semibold text-pixel-text-dark">
-                                {cafe.ratings.overall.toFixed(1)}
+                          {/* Overall Rating */}
+                          <div className="flex items-center gap-1 mb-2">
+                            <Star size={12} className="text-amber-600 fill-amber-600" />
+                            <span className="text-xs font-semibold text-amber-900">
+                              {cafe.ratings.overall > 0 ? cafe.ratings.overall.toFixed(1) : '0.0'}
+                            </span>
+                            {cafe.totalReviews > 0 && (
+                              <span className="text-xs text-amber-700">
+                                ({cafe.totalReviews} {cafe.totalReviews === 1 ? 'review' : 'reviews'})
                               </span>
-                              {cafe.totalReviews > 0 && (
-                                <span className="text-xs text-pixel-brown font-mono">
-                                  ({cafe.totalReviews} {cafe.totalReviews === 1 ? 'review' : 'reviews'})
-                                </span>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Hours */}
-                          {(cafe as any).hourstText && (
-                            <div className="flex items-start gap-1 text-xs text-pixel-brown mb-2 font-mono">
-                              <Clock size={12} className="text-pixel-brown mt-0.5 flex-shrink-0" />
-                              <span className="line-clamp-1">
-                                {formatHours((cafe as any).hourstText)}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Contact info */}
-                          <div className="flex items-center gap-3 mt-2">
-                            {(cafe as any).phone && (
-                              <div className="flex items-center gap-1 text-xs text-pixel-brown font-mono">
-                                <Phone size={10} />
-                                <span>{(cafe as any).phone}</span>
-                              </div>
-                            )}
-                            {cafe.website && (
-                              <a
-                                href={cafe.website}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="flex items-center gap-1 text-xs text-pixel-copper hover:text-pixel-brown font-mono border-b border-pixel-copper"
-                              >
-                                <Globe size={10} />
-                                <span>WEBSITE</span>
-                              </a>
                             )}
                           </div>
+
+                          {/* Expanded Ratings - Show all categories with interactive stars */}
+                          {expandedCafeId === cafe.id && (
+                            <div className="mt-3 pt-3 border-t border-amber-300 space-y-2">
+                              <div className="text-xs font-semibold text-amber-900 mb-3">Rate this cafe:</div>
+
+                              {/* Coffee Quality */}
+                              <div className="flex items-center gap-2">
+                                <Image
+                                  src="/assets/coffee.png"
+                                  alt="Coffee"
+                                  width={20}
+                                  height={20}
+                                  className="object-contain pixel-image flex-shrink-0"
+                                  unoptimized
+                                />
+                                <span className="text-xs text-amber-800 w-16 flex-shrink-0">Coffee</span>
+                                <StarRating
+                                  rating={cafe.ratings.coffee || 0}
+                                  size={14}
+                                  interactive={true}
+                                  onChange={(rating) => console.log('Coffee rating:', rating)}
+                                  showNumber={true}
+                                />
+                              </div>
+
+                              {/* Vibe */}
+                              <div className="flex items-center gap-2">
+                                <Image
+                                  src="/assets/vibes.png"
+                                  alt="Vibe"
+                                  width={20}
+                                  height={20}
+                                  className="object-contain pixel-image flex-shrink-0"
+                                  unoptimized
+                                />
+                                <span className="text-xs text-amber-800 w-16 flex-shrink-0">Vibe</span>
+                                <StarRating
+                                  rating={cafe.ratings.vibe || 0}
+                                  size={14}
+                                  interactive={true}
+                                  onChange={(rating) => console.log('Vibe rating:', rating)}
+                                  showNumber={true}
+                                />
+                              </div>
+
+                              {/* WiFi */}
+                              <div className="flex items-center gap-2">
+                                <Image
+                                  src="/assets/wifi.png"
+                                  alt="WiFi"
+                                  width={20}
+                                  height={20}
+                                  className="object-contain pixel-image flex-shrink-0"
+                                  unoptimized
+                                />
+                                <span className="text-xs text-amber-800 w-16 flex-shrink-0">WiFi</span>
+                                <StarRating
+                                  rating={cafe.ratings.wifi || 0}
+                                  size={14}
+                                  interactive={true}
+                                  onChange={(rating) => console.log('WiFi rating:', rating)}
+                                  showNumber={true}
+                                />
+                              </div>
+
+                              {/* Outlets */}
+                              <div className="flex items-center gap-2">
+                                <Image
+                                  src="/assets/plugs.png"
+                                  alt="Outlets"
+                                  width={20}
+                                  height={20}
+                                  className="object-contain pixel-image flex-shrink-0"
+                                  unoptimized
+                                />
+                                <span className="text-xs text-amber-800 w-16 flex-shrink-0">Outlets</span>
+                                <StarRating
+                                  rating={cafe.ratings.outlets || 0}
+                                  size={14}
+                                  interactive={true}
+                                  onChange={(rating) => console.log('Outlets rating:', rating)}
+                                  showNumber={true}
+                                />
+                              </div>
+
+                              {/* Seating */}
+                              <div className="flex items-center gap-2">
+                                <Image
+                                  src="/assets/seats.png"
+                                  alt="Seating"
+                                  width={20}
+                                  height={20}
+                                  className="object-contain pixel-image flex-shrink-0"
+                                  unoptimized
+                                />
+                                <span className="text-xs text-amber-800 w-16 flex-shrink-0">Seating</span>
+                                <StarRating
+                                  rating={cafe.ratings.seating || 0}
+                                  size={14}
+                                  interactive={true}
+                                  onChange={(rating) => console.log('Seating rating:', rating)}
+                                  showNumber={true}
+                                />
+                              </div>
+
+                              {/* Noise */}
+                              <div className="flex items-center gap-2">
+                                <Image
+                                  src="/assets/noise.png"
+                                  alt="Noise"
+                                  width={20}
+                                  height={20}
+                                  className="object-contain pixel-image flex-shrink-0"
+                                  unoptimized
+                                />
+                                <span className="text-xs text-amber-800 w-16 flex-shrink-0">Noise</span>
+                                <StarRating
+                                  rating={cafe.ratings.noise || 0}
+                                  size={14}
+                                  interactive={true}
+                                  onChange={(rating) => console.log('Noise rating:', rating)}
+                                  showNumber={true}
+                                />
+                              </div>
+                            </div>
+                          )}
+
                         </div>
                       </div>
                     </div>
@@ -447,9 +586,9 @@ export default function MapView({
               </div>
             ) : (
               <div className="flex-1 flex items-center justify-center p-8">
-                <div className="text-center text-pixel-brown">
-                  <p className="text-sm font-pixel mb-2">NO CAFES FOUND</p>
-                  <p className="text-xs font-mono">Search for cafes to see results here</p>
+                <div className="text-center text-amber-700">
+                  <p className="text-sm font-semibold mb-1">No cafes found</p>
+                  <p className="text-xs">Search to see results</p>
                 </div>
               </div>
             )}
@@ -464,14 +603,13 @@ export default function MapView({
           e.stopPropagation();
           handlePanelToggle(!isPanelCollapsed);
         }}
-        className={`absolute ${isPanelCollapsed ? 'left-4' : 'left-[400px]'} top-4 z-40 bg-pixel-beige border-3 border-pixel-text-dark p-2 shadow-pixel-sm hover:bg-pixel-terracotta transition-all`}
-        style={{ borderRadius: 0 }}
+        className={`absolute ${isPanelCollapsed ? 'left-4' : 'left-[392px]'} top-4 z-40 bg-amber-100 border-2 border-amber-700 p-2 rounded shadow-md hover:bg-amber-200 transition-all`}
         aria-label={isPanelCollapsed ? "Expand panel" : "Collapse panel"}
       >
         {isPanelCollapsed ? (
-          <ChevronRight size={18} className="text-pixel-text-dark" />
+          <ChevronRight size={18} className="text-amber-900" />
         ) : (
-          <ChevronLeft size={18} className="text-pixel-text-dark" />
+          <ChevronLeft size={18} className="text-amber-900" />
         )}
       </button>
 
@@ -482,7 +620,7 @@ export default function MapView({
           {...viewState}
           onMove={evt => setViewState(evt.viewState)}
           mapboxAccessToken={apiKey}
-          mapStyle="mapbox://styles/mapbox/streets-v12"
+          mapStyle="mapbox://styles/zzibo/cmhww7iqz000r01sqbilwhha0"
           style={{ width: '100%', height: '100%' }}
         >
           {/* Navigation controls (zoom in/out) */}
@@ -504,9 +642,9 @@ export default function MapView({
             >
               <div className="relative">
                 {/* Pulsing circle effect */}
-                <div className="absolute -inset-2 bg-pixel-copper rounded-full opacity-20 animate-ping" />
+                <div className="absolute -inset-3 bg-blue-500 rounded-full opacity-30 animate-ping" />
                 {/* Center dot */}
-                <div className="w-4 h-4 bg-pixel-copper rounded-full border-2 border-white shadow-lg" />
+                <div className="w-5 h-5 bg-blue-500 rounded-full border-3 border-white shadow-lg relative z-10" />
               </div>
             </Marker>
           )}
