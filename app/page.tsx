@@ -1,7 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
+import { AuthModal } from '@/components/auth/AuthModal';
+import { useAuth } from '@/lib/auth/AuthContext';
+import { useOnboarding } from '@/hooks/useOnboarding';
 
 // Dynamically import MapView to avoid SSR issues with Mapbox
 const MapView = dynamic(() => import('@/components/map/MapView'), {
@@ -17,6 +21,9 @@ const MapView = dynamic(() => import('@/components/map/MapView'), {
 });
 
 export default function Home() {
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const { user, profile, signOut } = useAuth();
+  useOnboarding(); // Handles onboarding redirection
   // You'll need to get a Mapbox API key from https://account.mapbox.com/
   const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
 
@@ -45,40 +52,53 @@ export default function Home() {
 
   return (
     <main className="w-full h-screen">
-      {/* Header */}
-      <header className="absolute top-0 left-0 right-0 z-10 bg-white/90 backdrop-blur-sm shadow-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Image
-                src="/assets/c2c-icon.png"
-                alt="C2C Logo"
-                width={40}
-                height={40}
-                className="w-10 h-10"
-                unoptimized
-                priority
-              />
-              <div className="flex flex-col">
-                <div className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
-                  C2C
-                </div>
-                <p className="text-xs text-gray-600 hidden sm:block">
-                  Cafe to Code
-                </p>
-              </div>
+      {/* Header - Simplified */}
+      <header className="absolute top-0 left-0 right-0 z-10 bg-amber-50/95 backdrop-blur border-b-2 border-amber-900">
+        <div className="px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Image
+              src="/assets/c2c-icon.png"
+              alt="C2C"
+              width={32}
+              height={32}
+              className="w-8 h-8"
+              unoptimized
+              priority
+            />
+            <span className="text-xl font-bold text-amber-900">
+              C2C
+            </span>
+          </div>
+          {user && profile ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-amber-800">
+                @{profile.username}
+              </span>
+              <button
+                onClick={signOut}
+                className="px-3 py-1.5 text-sm text-amber-800 hover:text-amber-900 transition-colors"
+              >
+                Sign Out
+              </button>
             </div>
-            <button className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+          ) : (
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="px-4 py-1.5 text-sm bg-amber-700 hover:bg-amber-800 text-white rounded transition-colors"
+            >
               Sign In
             </button>
-          </div>
+          )}
         </div>
       </header>
 
       {/* Map - takes full screen */}
-      <div className="w-full h-full pt-[72px]">
+      <div className="w-full h-full pt-[57px]">
         <MapView apiKey={MAPBOX_TOKEN} />
       </div>
+
+      {/* Auth Modal */}
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </main>
   );
 }

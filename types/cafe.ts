@@ -16,11 +16,16 @@ export interface OpeningHours {
 export interface CafeRatings {
   coffee: number;
   vibe: number;
-  infra: number;
+  wifi: number;
+  outlets: number;
+  seating: number;
+  noise: number;
+  overall: number;
+  // Legacy fields for backwards compatibility
+  infra?: number;
   value?: number;
   workFriendliness?: number;
   food?: number;
-  overall: number;
 }
 
 export interface Cafe {

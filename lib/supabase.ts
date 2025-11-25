@@ -6,18 +6,6 @@ export const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// Server-side Supabase client (admin access, never use in frontend)
-export const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-);
-
 // Type definitions for our database
 export type Cafe = {
   id: string;
@@ -77,4 +65,49 @@ export type CafeWithStats = {
   avg_overall: number;
   last_rated_at: string | null;
   created_at: string;
+};
+
+// Vibe preference type
+export type VibeType = 'lock-in' | 'network' | 'chill';
+
+// Profile metadata structure
+export type ProfileMetadata = {
+  vibe: VibeType;
+  onboarded_at?: string;
+  preferences?: {
+    notifications?: boolean;
+    theme?: 'light' | 'dark';
+    map_style?: string;
+  };
+  stats?: {
+    favorite_cafe_id?: string;
+    total_check_ins?: number;
+  };
+};
+
+// Profile table type
+export type Profile = {
+  id: string;
+  username: string;
+  is_onboarded: boolean;
+  metadata: ProfileMetadata;
+  created_at: string;
+  updated_at: string;
+};
+
+// Profile with rating stats (from get_user_profile_with_stats function)
+export type ProfileWithStats = {
+  id: string;
+  username: string;
+  vibe: VibeType | null;
+  is_onboarded: boolean;
+  total_ratings: number;
+  avg_rating: number;
+  created_at: string;
+};
+
+// Rating with user info (for displaying ratings with usernames)
+export type RatingWithUser = Rating & {
+  username: string;
+  user_vibe: VibeType | null;
 };
