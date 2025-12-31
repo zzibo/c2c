@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import Map, { Marker, NavigationControl, GeolocateControl } from 'react-map-gl/mapbox';
 import Image from 'next/image';
-import { MapPin, Star, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MapPin, Star } from 'lucide-react';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import type { Coordinate, Cafe } from '@/types/cafe';
-import StarRating from '@/components/ui/StarRating';
+import RatingPanel from '@/components/cafe/RatingPanel';
+import { CafeSidebar } from '@/components/map/CafeSidebar';
 
 interface MapViewProps {
   apiKey: string;
@@ -34,7 +35,8 @@ export default function MapView({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCafeId, setSelectedCafeId] = useState<string | null>(null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
-  const [expandedCafeId, setExpandedCafeId] = useState<string | null>(null);
+  const [selectedCafeForRating, setSelectedCafeForRating] = useState<Cafe | null>(null);
+  const [showRatingPanel, setShowRatingPanel] = useState(false);
 
   useEffect(() => {
     // Get user's current location
@@ -224,16 +226,13 @@ export default function MapView({
     }
   };
 
-  // Handle cafe panel item click - center map on pin and toggle expansion
+  // Handle cafe panel item click - open rating panel
   const handleCafeClick = (cafe: Cafe) => {
-    // Toggle expansion
-    if (expandedCafeId === cafe.id) {
-      setExpandedCafeId(null);
-    } else {
-      setExpandedCafeId(cafe.id);
-    }
-
     setSelectedCafeId(cafe.id);
+    setSelectedCafeForRating(cafe);
+    setShowRatingPanel(true);
+
+    // Center map on cafe
     setViewState({
       longitude: cafe.location.lng,
       latitude: cafe.location.lat,
@@ -293,328 +292,9 @@ export default function MapView({
   };
 
   return (
-    <div className="w-full h-full relative flex">
-      {/* Left Panel */}
-      <div className={`${isPanelCollapsed ? 'w-0 min-w-0' : 'w-96'} flex-shrink-0 bg-amber-50 border-r-2 border-amber-900 flex flex-col transition-all duration-300 overflow-hidden relative z-30`}>
-
-        {/* Search Bar in Panel */}
-        <div className={`p-4 border-b-2 border-amber-900 ${isPanelCollapsed ? 'hidden' : ''}`}>
-          {/* Location Status Indicator */}
-          {!userLocation && !searchError && (
-            <div className="mb-3 bg-blue-50 text-blue-700 px-3 py-2 rounded text-xs border border-blue-300 flex items-center gap-2">
-              <div className="animate-spin h-3 w-3 border-2 border-blue-700 border-t-transparent rounded-full"></div>
-              <span>Getting your location...</span>
-            </div>
-          )}
-
-          <form onSubmit={handleSearchSubmit} className="mb-3">
-            <div className="flex gap-2">
-              <div className="flex-1 relative">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleSearchSubmit(e as any);
-                    }
-                  }}
-                  placeholder="Search cafes..."
-                  className="w-full px-3 py-2 pl-9 bg-amber-100 border border-amber-700 rounded focus:outline-none focus:ring-2 focus:ring-amber-600 focus:border-transparent text-sm placeholder-amber-700 text-amber-900"
-                  disabled={!userLocation || isSearching}
-                />
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-amber-700"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <button
-                type="submit"
-                onClick={handleSearchClick}
-                disabled={!userLocation || isSearching || !searchQuery.trim()}
-                className="bg-amber-700 hover:bg-amber-800 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-all text-sm font-medium"
-              >
-                Search
-              </button>
-            </div>
-          </form>
-
-          {/* Search Around Me Button */}
-          <div className="flex gap-2">
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                // Prevent if already searching or disabled
-                if (isSearching || !userLocation) {
-                  return;
-                }
-                searchAroundMe();
-              }}
-              disabled={!userLocation || isSearching}
-              className="bg-amber-100 hover:bg-amber-200 disabled:opacity-50 disabled:cursor-not-allowed border border-amber-700 text-amber-900 px-4 py-2 rounded transition-all text-sm font-medium flex items-center gap-2 flex-1"
-            >
-              {isSearching ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span className="text-sm">Searching...</span>
-                </>
-              ) : (
-                <>
-                  <MapPin className="h-4 w-4" />
-                  <span className="text-sm">Nearby (2mi)</span>
-                </>
-              )}
-            </button>
-
-            {/* Results count */}
-            {cafes.length > 0 && (
-              <div className="bg-amber-700 text-white px-3 py-2 rounded text-sm font-medium flex items-center">
-                {cafes.length}
-              </div>
-            )}
-          </div>
-
-          {/* Error message */}
-          {searchError && (
-            <div className="mt-2 bg-red-100 text-red-800 px-3 py-2 rounded text-sm border border-red-300">
-              {searchError}
-            </div>
-          )}
-        </div>
-
-        {/* Cafe List Panel */}
-        {!isPanelCollapsed && (
-          <>
-            {cafes.length > 0 ? (
-              <div
-                ref={panelRef}
-                className="flex-1 overflow-y-auto"
-              >
-                <div className="p-4 space-y-3">
-                  {cafes.map((cafe, index) => (
-                    <div
-                      key={cafe.id}
-                      ref={(el) => {
-                        cafeItemRefs.current[cafe.id] = el;
-                      }}
-                      onClick={() => handleCafeClick(cafe)}
-                      className={`p-3 cursor-pointer transition-all rounded border-2 ${selectedCafeId === cafe.id
-                        ? 'border-amber-700 bg-amber-100'
-                        : 'border-amber-300 bg-white hover:bg-amber-50'
-                        }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          {/* Cafe name and ranking */}
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs text-amber-700 font-semibold w-6">
-                              #{index + 1}
-                            </span>
-                            <h3 className="text-sm font-semibold text-amber-900 truncate">
-                              {cafe.name}
-                            </h3>
-                          </div>
-
-                          {/* Distance */}
-                          <div className="flex items-center gap-1 text-xs text-amber-800 mb-2">
-                            <MapPin size={12} className="text-amber-700" />
-                            <span>{formatDistance(cafe.distance)}</span>
-                          </div>
-
-                          {/* Address */}
-                          {cafe.address && (
-                            <p className="text-xs text-amber-700 mb-2 line-clamp-1">
-                              {cafe.address}
-                            </p>
-                          )}
-
-                          {/* Overall Rating */}
-                          <div className="flex items-center gap-1 mb-2">
-                            <Star size={12} className="text-amber-600 fill-amber-600" />
-                            <span className="text-xs font-semibold text-amber-900">
-                              {cafe.ratings.overall > 0 ? cafe.ratings.overall.toFixed(1) : '0.0'}
-                            </span>
-                            {cafe.totalReviews > 0 && (
-                              <span className="text-xs text-amber-700">
-                                ({cafe.totalReviews} {cafe.totalReviews === 1 ? 'review' : 'reviews'})
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Expanded Ratings - Show all categories with interactive stars */}
-                          {expandedCafeId === cafe.id && (
-                            <div className="mt-3 pt-3 border-t border-amber-300 space-y-2">
-                              <div className="text-xs font-semibold text-amber-900 mb-3">Rate this cafe:</div>
-
-                              {/* Coffee Quality */}
-                              <div className="flex items-center gap-2">
-                                <Image
-                                  src="/assets/coffee.png"
-                                  alt="Coffee"
-                                  width={20}
-                                  height={20}
-                                  className="object-contain pixel-image flex-shrink-0"
-                                  unoptimized
-                                />
-                                <span className="text-xs text-amber-800 w-16 flex-shrink-0">Coffee</span>
-                                <StarRating
-                                  rating={cafe.ratings.coffee || 0}
-                                  size={14}
-                                  interactive={true}
-                                  onChange={(rating) => console.log('Coffee rating:', rating)}
-                                  showNumber={true}
-                                />
-                              </div>
-
-                              {/* Vibe */}
-                              <div className="flex items-center gap-2">
-                                <Image
-                                  src="/assets/vibes.png"
-                                  alt="Vibe"
-                                  width={20}
-                                  height={20}
-                                  className="object-contain pixel-image flex-shrink-0"
-                                  unoptimized
-                                />
-                                <span className="text-xs text-amber-800 w-16 flex-shrink-0">Vibe</span>
-                                <StarRating
-                                  rating={cafe.ratings.vibe || 0}
-                                  size={14}
-                                  interactive={true}
-                                  onChange={(rating) => console.log('Vibe rating:', rating)}
-                                  showNumber={true}
-                                />
-                              </div>
-
-                              {/* WiFi */}
-                              <div className="flex items-center gap-2">
-                                <Image
-                                  src="/assets/wifi.png"
-                                  alt="WiFi"
-                                  width={20}
-                                  height={20}
-                                  className="object-contain pixel-image flex-shrink-0"
-                                  unoptimized
-                                />
-                                <span className="text-xs text-amber-800 w-16 flex-shrink-0">WiFi</span>
-                                <StarRating
-                                  rating={cafe.ratings.wifi || 0}
-                                  size={14}
-                                  interactive={true}
-                                  onChange={(rating) => console.log('WiFi rating:', rating)}
-                                  showNumber={true}
-                                />
-                              </div>
-
-                              {/* Outlets */}
-                              <div className="flex items-center gap-2">
-                                <Image
-                                  src="/assets/plugs.png"
-                                  alt="Outlets"
-                                  width={20}
-                                  height={20}
-                                  className="object-contain pixel-image flex-shrink-0"
-                                  unoptimized
-                                />
-                                <span className="text-xs text-amber-800 w-16 flex-shrink-0">Outlets</span>
-                                <StarRating
-                                  rating={cafe.ratings.outlets || 0}
-                                  size={14}
-                                  interactive={true}
-                                  onChange={(rating) => console.log('Outlets rating:', rating)}
-                                  showNumber={true}
-                                />
-                              </div>
-
-                              {/* Seating */}
-                              <div className="flex items-center gap-2">
-                                <Image
-                                  src="/assets/seats.png"
-                                  alt="Seating"
-                                  width={20}
-                                  height={20}
-                                  className="object-contain pixel-image flex-shrink-0"
-                                  unoptimized
-                                />
-                                <span className="text-xs text-amber-800 w-16 flex-shrink-0">Seating</span>
-                                <StarRating
-                                  rating={cafe.ratings.seating || 0}
-                                  size={14}
-                                  interactive={true}
-                                  onChange={(rating) => console.log('Seating rating:', rating)}
-                                  showNumber={true}
-                                />
-                              </div>
-
-                              {/* Noise */}
-                              <div className="flex items-center gap-2">
-                                <Image
-                                  src="/assets/noise.png"
-                                  alt="Noise"
-                                  width={20}
-                                  height={20}
-                                  className="object-contain pixel-image flex-shrink-0"
-                                  unoptimized
-                                />
-                                <span className="text-xs text-amber-800 w-16 flex-shrink-0">Noise</span>
-                                <StarRating
-                                  rating={cafe.ratings.noise || 0}
-                                  size={14}
-                                  interactive={true}
-                                  onChange={(rating) => console.log('Noise rating:', rating)}
-                                  showNumber={true}
-                                />
-                              </div>
-                            </div>
-                          )}
-
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="flex-1 flex items-center justify-center p-8">
-                <div className="text-center text-amber-700">
-                  <p className="text-sm font-semibold mb-1">No cafes found</p>
-                  <p className="text-xs">Search to see results</p>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Panel Toggle Button - Always visible outside panel */}
-      <button
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          handlePanelToggle(!isPanelCollapsed);
-        }}
-        className={`absolute ${isPanelCollapsed ? 'left-4' : 'left-[392px]'} top-4 z-40 bg-amber-100 border-2 border-amber-700 p-2 rounded shadow-md hover:bg-amber-200 transition-all`}
-        aria-label={isPanelCollapsed ? "Expand panel" : "Collapse panel"}
-      >
-        {isPanelCollapsed ? (
-          <ChevronRight size={18} className="text-amber-900" />
-        ) : (
-          <ChevronLeft size={18} className="text-amber-900" />
-        )}
-      </button>
-
-      {/* Map Container */}
-      <div className="flex-1 relative min-w-0">
+    <div className="w-full h-full relative">
+      {/* Map base layer */}
+      <div className="absolute inset-0">
         <Map
           ref={mapRef}
           {...viewState}
@@ -719,9 +399,34 @@ export default function MapView({
         </Map>
       </div>
 
+      {/* Left Panel overlay */}
+      <CafeSidebar
+        isCollapsed={isPanelCollapsed}
+        onToggle={handlePanelToggle}
+        cafes={cafes}
+        isSearching={isSearching}
+        searchError={searchError}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        onSearchSubmit={handleSearchSubmit}
+        onSearchClick={handleSearchClick}
+        onSearchAround={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (isSearching || !userLocation) return;
+          searchAroundMe();
+        }}
+        userLocation={userLocation}
+        selectedCafeId={selectedCafeId}
+        onCafeClick={handleCafeClick}
+        cafeItemRefs={cafeItemRefs}
+        panelRef={panelRef}
+        formatDistance={formatDistance}
+      />
+
       {/* Location status indicator */}
       {userLocation && (
-        <div className="absolute bottom-4 left-4 bg-pixel-beige border-3 border-pixel-text-dark px-4 py-2 shadow-pixel-sm text-xs font-mono" style={{ borderRadius: 0 }}>
+        <div className="absolute bottom-4 left-4 bg-pixel-beige border-3 border-pixel-text-dark px-4 py-2 shadow-pixel-sm text-xs font-mono z-20" style={{ borderRadius: 0 }}>
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-pixel-copper animate-pulse" style={{ borderRadius: 0 }} />
             <span className="text-pixel-text-dark">
@@ -729,6 +434,24 @@ export default function MapView({
             </span>
           </div>
         </div>
+      )}
+
+      {/* Rating Panel */}
+      {selectedCafeForRating && (
+        <RatingPanel
+          cafe={selectedCafeForRating}
+          isOpen={showRatingPanel}
+          onClose={() => {
+            setShowRatingPanel(false);
+            setSelectedCafeForRating(null);
+          }}
+          onRatingSubmitted={() => {
+            // Refresh cafe list to get updated ratings
+            if (userLocation) {
+              searchAroundMe();
+            }
+          }}
+        />
       )}
     </div>
   );

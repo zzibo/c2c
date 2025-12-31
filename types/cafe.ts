@@ -82,3 +82,24 @@ export interface UserProfile {
   ratingsCount: number;
   reputationScore: number;
 }
+
+export interface Rating {
+  id: string;
+  cafe_id: string;
+  user_id: string;
+  coffee_rating: number | null;
+  vibe_rating: number | null;
+  wifi_rating: number | null;
+  outlets_rating: number | null;
+  seating_rating: number | null;
+  noise_rating: number | null;
+  overall_rating: number;
+  comment: string | null;
+  photos: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RatingWithUser extends Rating {
+  username: string;
+}

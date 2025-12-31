@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase } from './supabase-client';
 import type { Profile, ProfileMetadata, VibeType } from './supabase';
 
 /**
@@ -147,13 +147,15 @@ export function validateUsername(username: string): string | null {
 }
 
 /**
- * Sign in with email OTP
+ * Sign in with email OTP (numeric code only, no magic link)
  */
 export async function signInWithEmail(email: string) {
   const { data, error } = await supabase.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: `${window.location.origin}/auth/callback`,
+      // Disable magic link, only send OTP code
+      shouldCreateUser: true,
+      // Do NOT include emailRedirectTo - this causes magic link to be sent
     },
   });
 
