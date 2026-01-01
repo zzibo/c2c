@@ -36,7 +36,7 @@ export async function GET(
 
     // Fetch usernames for all user_ids
     const userIds = [...new Set((ratings || []).map((r: any) => r.user_id))];
-    let profiles = [];
+    let profiles: { id: string; username: string }[] = [];
 
     if (userIds.length > 0) {
       const { data } = await supabaseAdmin
