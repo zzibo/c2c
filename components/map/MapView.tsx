@@ -322,9 +322,9 @@ export default function MapView({
             >
               <div className="relative">
                 {/* Pulsing circle effect */}
-                <div className="absolute -inset-3 bg-blue-500 rounded-full opacity-30 animate-ping" />
+                <div className="absolute -inset-3 bg-c2c-orange rounded-full opacity-30 animate-ping" />
                 {/* Center dot */}
-                <div className="w-5 h-5 bg-blue-500 rounded-full border-3 border-white shadow-lg relative z-10" />
+                <div className="w-5 h-5 bg-c2c-orange rounded-full border-3 border-white shadow-lg relative z-10" />
               </div>
             </Marker>
           )}
