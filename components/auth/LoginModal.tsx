@@ -76,9 +76,9 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
     }
   };
 
-  // Handle OTP input change (auto-format to 8 digits)
+  // Handle OTP input change (auto-format to 6 digits)
   const handleOtpChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, '').slice(0, 8);
+    const value = e.target.value.replace(/\D/g, '').slice(0, 6);
     setOtp(value);
   };
 
@@ -168,7 +168,7 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
           <>
             <h2 className="text-xl font-bold text-amber-900 mb-2">Enter Code</h2>
             <p className="text-sm text-amber-700 mb-4">
-              We sent an 8-digit code to{' '}
+              We sent a 6-digit code to{' '}
               <span className="font-semibold">{email}</span>
             </p>
 
@@ -181,15 +181,15 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
                   type="text"
                   value={otp}
                   onChange={handleOtpChange}
-                  placeholder="00000000"
+                  placeholder="000000"
                   required
                   disabled={loading}
-                  maxLength={8}
+                  maxLength={6}
                   className="w-full px-3 py-2 text-2xl text-center font-mono tracking-widest bg-white border border-amber-700 rounded focus:outline-none focus:ring-2 focus:ring-amber-600 text-amber-900 placeholder-amber-400 disabled:opacity-50 disabled:cursor-not-allowed"
                   autoFocus
                 />
                 <p className="text-xs text-amber-600 mt-1 text-center">
-                  {otp.length}/8 digits
+                  {otp.length}/6 digits
                 </p>
               </div>
 
@@ -201,7 +201,7 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
 
               <button
                 type="submit"
-                disabled={loading || otp.length !== 8}
+                disabled={loading || otp.length !== 6}
                 className="w-full bg-amber-700 hover:bg-amber-800 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-all text-sm font-medium mb-3"
               >
                 {loading ? 'Verifying...' : 'Verify & Sign In'}
