@@ -117,7 +117,7 @@ export default function StarRating({
       </div>
 
       {showNumber && (
-        <span className="text-xs font-medium text-amber-900 ml-1">
+        <span className="text-xs font-medium text-c2c-orange ml-1">
           {displayRating.toFixed(1)}
         </span>
       )}

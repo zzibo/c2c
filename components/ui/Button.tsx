@@ -17,9 +17,9 @@ export function Button({
   const baseStyles = 'font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
 
   const variantStyles = {
-    primary: 'bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700',
-    secondary: 'bg-gray-200 text-gray-900 hover:bg-gray-300 active:bg-gray-400',
-    danger: 'bg-red-500 text-white hover:bg-red-600 active:bg-red-700',
+    primary: 'bg-c2c-orange text-white hover:bg-c2c-orange-dark active:bg-c2c-orange-dark',
+    secondary: 'bg-white border border-gray-700 text-gray-900 hover:bg-gray-100 active:bg-gray-200',
+    danger: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800',
   };
 
   const sizeStyles = {

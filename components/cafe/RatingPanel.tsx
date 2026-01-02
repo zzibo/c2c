@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
-import { X, Edit2, Trash2 } from 'lucide-react';
+import { X, Edit2 } from 'lucide-react';
 import type { Cafe, Rating, RatingWithUser } from '@/types/cafe';
 import StarRating from '@/components/ui/StarRating';
 import LoginModal from '@/components/auth/LoginModal';
@@ -268,13 +268,13 @@ export default function RatingPanel({
 
       {/* Panel */}
       <div
-        className="fixed right-0 top-0 h-full w-[400px] bg-amber-50 border-l-2 border-amber-900 shadow-xl z-50 overflow-y-auto"
+        className="fixed right-0 top-0 h-full w-[400px] bg-c2c-base border-l-2 border-c2c-orange shadow-xl z-50 overflow-y-auto"
         style={{ animation: 'slideInRight 300ms ease-out' }}
       >
         {/* Header */}
-        <div className="sticky top-0 bg-amber-50 border-b-2 border-amber-900 z-10">
+        <div className="sticky top-0 bg-c2c-base border-b-2 border-c2c-orange z-10">
           {/* Logo Section - 15% */}
-          <div className="h-[15vh] flex items-center justify-center bg-amber-100 border-b-2 border-amber-900 relative">
+          <div className="h-[15vh] flex items-center justify-center bg-gray-50 border-b-2 border-c2c-orange relative">
             <Image
               src="/assets/c2c-icon.png"
               alt="C2C"
@@ -286,18 +286,18 @@ export default function RatingPanel({
             {/* Close button */}
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 p-2 hover:bg-amber-200 rounded transition-colors"
+              className="absolute top-4 right-4 p-2 hover:bg-gray-200 rounded transition-colors"
               aria-label="Close panel"
             >
-              <X size={20} className="text-amber-900" />
+              <X size={20} className="text-c2c-orange" />
             </button>
           </div>
 
           {/* Cafe Info */}
-          <div className="p-4 bg-amber-50">
-            <h2 className="text-lg font-bold text-amber-900 mb-1">{cafe.name}</h2>
+          <div className="p-4 bg-c2c-base">
+            <h2 className="text-lg font-bold text-c2c-orange mb-1">{cafe.name}</h2>
             {cafe.address && (
-              <p className="text-xs text-amber-700 mb-2">{cafe.address}</p>
+              <p className="text-xs text-c2c-orange mb-2">{cafe.address}</p>
             )}
             <div className="flex items-center gap-2">
               <StarRating
@@ -306,7 +306,7 @@ export default function RatingPanel({
                 showNumber={true}
               />
               {cafe.totalReviews > 0 && (
-                <span className="text-xs text-amber-700">
+                <span className="text-xs text-c2c-orange">
                   ({cafe.totalReviews} {cafe.totalReviews === 1 ? 'review' : 'reviews'})
                 </span>
               )}
@@ -317,8 +317,8 @@ export default function RatingPanel({
         {/* Content */}
         <div className="p-4">
           {isLoading ? (
-            <div className="text-center py-8 text-amber-700">
-              <div className="animate-spin h-8 w-8 border-2 border-amber-700 border-t-transparent rounded-full mx-auto mb-2"></div>
+            <div className="text-center py-8 text-gray-700">
+              <div className="animate-spin h-8 w-8 border-2 border-c2c-orange border-t-transparent rounded-full mx-auto mb-2"></div>
               <p className="text-sm">Loading ratings...</p>
             </div>
           ) : (
@@ -339,11 +339,11 @@ export default function RatingPanel({
 
               {/* Authentication Warning */}
               {!isAuthenticated && (
-                <div className="mb-4 bg-blue-100 text-blue-800 px-4 py-3 rounded border border-blue-300">
+                <div className="mb-4 bg-c2c-orange/10 text-c2c-orange px-4 py-3 rounded border border-c2c-orange/30">
                   <p className="text-sm mb-2">Please sign in to rate this cafe</p>
                   <button
                     onClick={() => setShowLoginModal(true)}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-all text-sm font-medium"
+                    className="w-full bg-c2c-orange hover:bg-c2c-orange-dark text-white px-4 py-2 rounded transition-all text-sm font-medium"
                   >
                     Sign In
                   </button>
@@ -352,33 +352,33 @@ export default function RatingPanel({
 
               {/* YOUR RATING SECTION */}
               <div className="mb-6">
-                <h3 className="text-sm font-bold text-amber-900 mb-3 uppercase">
+                <h3 className="text-sm font-bold text-c2c-orange mb-3 uppercase">
                   Your Rating
                 </h3>
 
                 {userRating && !isEditing ? (
                   // Show existing rating (read-only)
-                  <div className="bg-amber-100 border-2 border-amber-700 rounded p-3">
+                  <div className="bg-gray-50 border-2 border-gray-400 rounded p-3">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-amber-900">
+                      <span className="text-sm text-gray-900">
                         You rated this cafe{' '}
                         <span className="font-bold">{userRating.overall_rating.toFixed(1)}★</span>
                       </span>
                       <div className="flex gap-2">
                         <button
                           onClick={handleEdit}
-                          className="p-1 hover:bg-amber-200 rounded transition-colors"
+                          className="p-1 hover:bg-gray-200 rounded transition-colors"
                           aria-label="Edit rating"
                         >
-                          <Edit2 size={14} className="text-amber-900" />
+                          <Edit2 size={14} className="text-gray-900" />
                         </button>
                       </div>
                     </div>
-                    <p className="text-xs text-amber-700">
+                    <p className="text-xs text-gray-700">
                       {formatDate(userRating.updated_at)}
                     </p>
                     {userRating.comment && (
-                      <p className="text-sm text-amber-900 mt-2 italic">
+                      <p className="text-sm text-gray-900 mt-2 italic">
                         "{userRating.comment}"
                       </p>
                     )}
@@ -391,15 +391,15 @@ export default function RatingPanel({
                       <Image
                         src="/assets/coffee.png"
                         alt="Coffee"
-                        width={20}
-                        height={20}
+                        width={30}
+                        height={30}
                         className="object-contain pixel-image flex-shrink-0"
                         unoptimized
                       />
-                      <span className="text-xs text-amber-800 w-16 flex-shrink-0">Coffee</span>
+                      <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Coffee</span>
                       <StarRating
                         rating={formData.coffee_rating || 0}
-                        size={16}
+                        size={20}
                         interactive={isAuthenticated}
                         onChange={(rating) => handleRatingChange('coffee_rating', rating)}
                         showNumber={true}
@@ -411,15 +411,15 @@ export default function RatingPanel({
                       <Image
                         src="/assets/vibes.png"
                         alt="Vibe"
-                        width={20}
-                        height={20}
+                        width={30}
+                        height={30}
                         className="object-contain pixel-image flex-shrink-0"
                         unoptimized
                       />
-                      <span className="text-xs text-amber-800 w-16 flex-shrink-0">Vibe</span>
+                      <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Vibe</span>
                       <StarRating
                         rating={formData.vibe_rating || 0}
-                        size={16}
+                        size={20}
                         interactive={isAuthenticated}
                         onChange={(rating) => handleRatingChange('vibe_rating', rating)}
                         showNumber={true}
@@ -431,15 +431,15 @@ export default function RatingPanel({
                       <Image
                         src="/assets/wifi.png"
                         alt="WiFi"
-                        width={20}
-                        height={20}
+                        width={30}
+                        height={30}
                         className="object-contain pixel-image flex-shrink-0"
                         unoptimized
                       />
-                      <span className="text-xs text-amber-800 w-16 flex-shrink-0">WiFi</span>
+                      <span className="text-xs text-c2c-orange w-16 flex-shrink-0">WiFi</span>
                       <StarRating
                         rating={formData.wifi_rating || 0}
-                        size={16}
+                        size={20}
                         interactive={isAuthenticated}
                         onChange={(rating) => handleRatingChange('wifi_rating', rating)}
                         showNumber={true}
@@ -451,15 +451,15 @@ export default function RatingPanel({
                       <Image
                         src="/assets/plugs.png"
                         alt="Outlets"
-                        width={20}
-                        height={20}
+                          width={30}
+                          height={30}
                         className="object-contain pixel-image flex-shrink-0"
                         unoptimized
                       />
-                      <span className="text-xs text-amber-800 w-16 flex-shrink-0">Outlets</span>
+                      <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Outlets</span>
                       <StarRating
                         rating={formData.outlets_rating || 0}
-                        size={16}
+                        size={20}
                         interactive={isAuthenticated}
                         onChange={(rating) => handleRatingChange('outlets_rating', rating)}
                         showNumber={true}
@@ -471,15 +471,15 @@ export default function RatingPanel({
                       <Image
                         src="/assets/seats.png"
                         alt="Seating"
-                        width={20}
-                        height={20}
+                          width={30}
+                          height={30}
                         className="object-contain pixel-image flex-shrink-0"
                         unoptimized
                       />
-                      <span className="text-xs text-amber-800 w-16 flex-shrink-0">Seating</span>
+                      <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Seating</span>
                       <StarRating
                         rating={formData.seating_rating || 0}
-                        size={16}
+                        size={20}
                         interactive={isAuthenticated}
                         onChange={(rating) => handleRatingChange('seating_rating', rating)}
                         showNumber={true}
@@ -491,15 +491,15 @@ export default function RatingPanel({
                       <Image
                         src="/assets/noise.png"
                         alt="Noise"
-                        width={20}
-                        height={20}
+                          width={30}
+                          height={30}
                         className="object-contain pixel-image flex-shrink-0"
                         unoptimized
                       />
-                      <span className="text-xs text-amber-800 w-16 flex-shrink-0">Noise</span>
+                      <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Noise</span>
                       <StarRating
                         rating={formData.noise_rating || 0}
-                        size={16}
+                        size={20}
                         interactive={isAuthenticated}
                         onChange={(rating) => handleRatingChange('noise_rating', rating)}
                         showNumber={true}
@@ -508,7 +508,7 @@ export default function RatingPanel({
 
                     {/* Comment */}
                     <div className="mt-3">
-                      <label className="text-xs text-amber-800 block mb-1">
+                      <label className="text-xs text-c2c-orange block mb-1">
                         Comment (optional)
                       </label>
                       <textarea
@@ -516,11 +516,11 @@ export default function RatingPanel({
                         onChange={handleCommentChange}
                         disabled={!isAuthenticated}
                         placeholder="Share your experience..."
-                        className="w-full px-3 py-2 text-sm bg-white border border-amber-700 rounded focus:outline-none focus:ring-2 focus:ring-amber-600 text-amber-900 placeholder-amber-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full px-3 py-2 text-sm bg-white border border-c2c-orange rounded focus:outline-none focus:ring-2 focus:ring-c2c-orange text-c2c-orange placeholder-c2c-orange/60 disabled:opacity-50 disabled:cursor-not-allowed"
                         rows={3}
                         maxLength={500}
                       />
-                      <p className="text-xs text-amber-600 mt-1">
+                      <p className="text-xs text-c2c-orange mt-1">
                         {formData.comment.length}/500 characters
                       </p>
                     </div>
@@ -530,7 +530,7 @@ export default function RatingPanel({
                       <button
                         onClick={handleSubmit}
                         disabled={!isAuthenticated || isSubmitting}
-                        className="flex-1 bg-amber-700 hover:bg-amber-800 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-all text-sm font-medium"
+                        className="flex-1 bg-c2c-orange hover:bg-c2c-orange-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-all text-sm font-medium"
                       >
                         {isSubmitting
                           ? 'Submitting...'
@@ -541,7 +541,7 @@ export default function RatingPanel({
                       {isEditing && (
                         <button
                           onClick={handleCancelEdit}
-                          className="px-4 py-2 bg-amber-200 hover:bg-amber-300 text-amber-900 rounded transition-all text-sm font-medium"
+                          className="px-4 py-2 bg-c2c-base hover:bg-c2c-base/70 text-c2c-orange border border-c2c-orange rounded transition-all text-sm font-medium"
                         >
                           Cancel
                         </button>
@@ -552,13 +552,13 @@ export default function RatingPanel({
               </div>
 
               {/* ALL REVIEWS SECTION */}
-              <div className="border-t-2 border-amber-300 pt-4">
-                <h3 className="text-sm font-bold text-amber-900 mb-3 uppercase">
+              <div className="border-t-2 border-c2c-orange/40 pt-4">
+                <h3 className="text-sm font-bold text-c2c-orange mb-3 uppercase">
                   All Reviews ({allRatings.length})
                 </h3>
 
                 {allRatings.length === 0 ? (
-                  <div className="text-center py-8 text-amber-700">
+                  <div className="text-center py-8 text-c2c-orange">
                     <p className="text-sm">No reviews yet.</p>
                     <p className="text-xs mt-1">Be the first to rate this cafe!</p>
                   </div>
@@ -567,27 +567,27 @@ export default function RatingPanel({
                     {allRatings.map((rating) => (
                       <div
                         key={rating.id}
-                        className="bg-white border border-amber-300 rounded p-3"
+                        className="bg-white border border-c2c-orange/40 rounded p-3"
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div>
-                            <p className="text-sm font-semibold text-amber-900">
+                            <p className="text-sm font-semibold text-c2c-orange">
                               {rating.username}
                             </p>
                             <div className="flex items-center gap-2 mt-1">
                               <StarRating rating={rating.overall_rating} size={12} />
-                              <span className="text-xs text-amber-700">
+                              <span className="text-xs text-c2c-orange">
                                 {rating.overall_rating.toFixed(1)}
                               </span>
                             </div>
                           </div>
-                          <span className="text-xs text-amber-600">
+                          <span className="text-xs text-c2c-orange">
                             {formatDate(rating.created_at)}
                           </span>
                         </div>
 
                         {rating.comment && (
-                          <p className="text-sm text-amber-900 mt-2">{rating.comment}</p>
+                          <p className="text-sm text-c2c-orange mt-2">{rating.comment}</p>
                         )}
 
                         {/* Show category ratings if any exist */}
@@ -597,7 +597,7 @@ export default function RatingPanel({
                           rating.outlets_rating ||
                           rating.seating_rating ||
                           rating.noise_rating) && (
-                          <div className="mt-2 pt-2 border-t border-amber-200 text-xs text-amber-700 space-y-1">
+                          <div className="mt-2 pt-2 border-t border-c2c-orange/20 text-xs text-c2c-orange space-y-1">
                             {rating.coffee_rating && (
                               <div>☕ Coffee: {rating.coffee_rating.toFixed(1)}</div>
                             )}
