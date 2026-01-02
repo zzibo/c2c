@@ -29,11 +29,28 @@ export async function GET(request: NextRequest) {
 
     const user_id = session.user.id;
 
+    // Look up cafe by geoapify_place_id (frontend sends this as cafe.id)
+    const { data: cafeData, error: cafeError } = await supabaseAdmin
+      .from('cafes')
+      .select('id')
+      .eq('geoapify_place_id', cafe_id)
+      .single();
+
+    if (cafeError || !cafeData) {
+      console.error('Error looking up cafe:', cafeError || 'Cafe not found', { cafe_id });
+      return NextResponse.json(
+        { error: `Cafe not found: ${cafe_id}` },
+        { status: 404 }
+      );
+    }
+
+    const cafe_uuid = cafeData.id;
+
     // Query for existing rating
     const { data: rating, error } = await supabaseAdmin
       .from('ratings')
       .select('*')
-      .eq('cafe_id', cafe_id)
+      .eq('cafe_id', cafe_uuid)
       .eq('user_id', user_id)
       .single();
 
