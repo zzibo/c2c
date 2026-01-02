@@ -11,19 +11,10 @@ const config: Config = {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
-        // C2C brand colors
-        'c2c-base': '#f6f0e8',        // warm off-white
-        'c2c-orange': '#f4512c',      // primary accent
-        'c2c-orange-dark': '#e64524', // hover/active
-        // Pixel Art Color Palette
-        'pixel-cream': '#f5e6d3',
-        'pixel-dark': '#2a2420',
-        'pixel-copper': '#d4823f',
-        'pixel-brown': '#8b6f47',
-        'pixel-terracotta': '#c9956a',
-        'pixel-text-dark': '#5a4a42',
-        'pixel-text-light': '#f5e6d3',
-        'pixel-beige': '#faf4ed',
+        // C2C brand colors (ONLY USE THESE)
+        'c2c-base': '#f6f0e8',        // warm off-white backgrounds
+        'c2c-orange': '#f4512c',      // primary accent (CTAs, highlights)
+        'c2c-orange-dark': '#e64524', // hover/active states
       },
       fontFamily: {
         'sans': ['var(--font-roboto-mono)', 'sans-serif'],

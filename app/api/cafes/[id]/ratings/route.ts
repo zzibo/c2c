@@ -10,13 +10,39 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: cafe_id } = await params;
+    const { id: cafeIdentifier } = await params;
 
-    if (!cafe_id) {
+    if (!cafeIdentifier) {
       return NextResponse.json(
         { error: 'Missing cafe ID' },
         { status: 400 }
       );
+    }
+
+    // Check if identifier is a UUID or geoapify_place_id
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cafeIdentifier);
+    
+    let cafe_id: string;
+    
+    if (isUUID) {
+      // It's already a UUID, use it directly
+      cafe_id = cafeIdentifier;
+    } else {
+      // It's a geoapify_place_id, look up the cafe UUID
+      const { data: cafe, error: cafeError } = await supabaseAdmin
+        .from('cafes')
+        .select('id')
+        .eq('geoapify_place_id', cafeIdentifier)
+        .single();
+
+      if (cafeError || !cafe) {
+        return NextResponse.json(
+          { error: 'Cafe not found' },
+          { status: 404 }
+        );
+      }
+      
+      cafe_id = cafe.id;
     }
 
     // Fetch all ratings for this cafe
