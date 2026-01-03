@@ -41,6 +41,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Look up cafe by geoapify_place_id (frontend sends this as cafe.id)
+    // The database expects a UUID, so we need to find the cafe first
+    const { data: cafeData, error: cafeError } = await supabaseAdmin
+      .from('cafes')
+      .select('id')
+      .eq('geoapify_place_id', cafe_id)
+      .single();
+
+    if (cafeError || !cafeData) {
+      return NextResponse.json(
+        { error: `Cafe not found: ${cafe_id}` },
+        { status: 404 }
+      );
+    }
+
+    const cafe_uuid = cafeData.id;
+
     // At least one rating must be provided
     const hasAtLeastOneRating = [
       coffee_rating,
@@ -75,7 +92,7 @@ export async function POST(request: NextRequest) {
     const { data: newRating, error: insertError } = await supabaseAdmin
       .from('ratings')
       .insert({
-        cafe_id,
+        cafe_id: cafe_uuid,
         user_id,
         coffee_rating,
         vibe_rating,
@@ -101,7 +118,7 @@ export async function POST(request: NextRequest) {
       }
 
       return NextResponse.json(
-        { error: 'Failed to create rating' },
+        { error: `Failed to create rating: ${JSON.stringify(insertError)}` },
         { status: 500 }
       );
     }
