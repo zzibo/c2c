@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '../supabase';
+import { supabase } from '../supabase-client';
 import type { Profile } from '../supabase';
 import { getProfile, signOut as authSignOut } from '../auth';
 

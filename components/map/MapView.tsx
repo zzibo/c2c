@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Map, { Marker, NavigationControl, GeolocateControl } from 'react-map-gl/mapbox';
 import Image from 'next/image';
 import { MapPin, Star } from 'lucide-react';
@@ -8,6 +8,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import type { Coordinate, Cafe } from '@/types/cafe';
 import RatingPanel from '@/components/cafe/RatingPanel';
 import { CafeSidebar } from '@/components/map/CafeSidebar';
+import { useSearch } from '@/lib/search/SearchContext';
 
 interface MapViewProps {
   apiKey: string;
@@ -30,13 +31,14 @@ export default function MapView({
   });
   const [userLocation, setUserLocation] = useState<Coordinate | null>(null);
   const [cafes, setCafes] = useState<Cafe[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedCafeId, setSelectedCafeId] = useState<string | null>(null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [selectedCafeForRating, setSelectedCafeForRating] = useState<Cafe | null>(null);
   const [showRatingPanel, setShowRatingPanel] = useState(false);
+  
+  // Use SearchContext for shared search state
+  const { searchQuery, setSearchQuery, isSearching, setIsSearching, registerSearchHandler } = useSearch();
 
   useEffect(() => {
     // Get user's current location
@@ -154,7 +156,7 @@ export default function MapView({
   };
 
   // Function to search cafes by name
-  const searchCafesByName = async (query: string) => {
+  const searchCafesByName = useCallback(async (query: string) => {
     // Prevent multiple simultaneous searches
     if (isSearching) {
       return;
@@ -198,7 +200,12 @@ export default function MapView({
     } finally {
       setIsSearching(false);
     }
-  };
+  }, [isSearching, userLocation, setIsSearching]);
+
+  // Register search handler with SearchContext so AppHeader can trigger searches
+  useEffect(() => {
+    registerSearchHandler(searchCafesByName);
+  }, [registerSearchHandler, searchCafesByName]);
 
   // Handle search form submission
   const handleSearchSubmit = (e: React.FormEvent) => {
