@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../supabase-client';
 import type { Profile } from '../supabase';
@@ -11,6 +11,7 @@ interface AuthContextType {
   profile: Profile | null;
   session: Session | null;
   isLoading: boolean;
+  isProfileLoading: boolean;
   isOnboarded: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -23,50 +24,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
 
-  const refreshProfile = async () => {
-    if (!user) {
+  const handleSessionChange = useCallback((session: Session | null) => {
+    setSession(session);
+    const newUser = session?.user ?? null;
+    setUser(newUser);
+    setIsLoading(false);
+
+    // Fetch profile if user exists
+    if (newUser) {
+      setIsProfileLoading(true);
+      getProfile(newUser.id)
+        .then((userProfile) => {
+          setProfile(userProfile);
+        })
+        .catch((error) => {
+          console.error('Error fetching profile:', error);
+          setProfile(null);
+        })
+        .finally(() => {
+          setIsProfileLoading(false);
+        });
+    } else {
       setProfile(null);
+      setIsProfileLoading(false);
+    }
+  }, []);
+
+  const refreshProfile = useCallback(async (userId: string | null) => {
+    if (!userId) {
+      setProfile(null);
+      setIsProfileLoading(false);
       return;
     }
 
+    setIsProfileLoading(true);
     try {
-      const userProfile = await getProfile(user.id);
+      const userProfile = await getProfile(userId);
       setProfile(userProfile);
     } catch (error) {
       console.error('Error fetching profile:', error);
       setProfile(null);
+    } finally {
+      setIsProfileLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsLoading(false);
+      handleSessionChange(session);
     });
 
     // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsLoading(false);
+      handleSessionChange(session);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
-
-  // Fetch profile when user changes
-  useEffect(() => {
-    if (user) {
-      refreshProfile();
-    } else {
-      setProfile(null);
-    }
-  }, [user]);
+  }, [handleSessionChange]);
 
   const handleSignOut = async () => {
     await authSignOut();
@@ -80,9 +99,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     profile,
     session,
     isLoading,
+    isProfileLoading,
     isOnboarded: profile?.is_onboarded ?? false,
     signOut: handleSignOut,
-    refreshProfile,
+    refreshProfile: () => refreshProfile(user?.id ?? null),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

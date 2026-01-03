@@ -9,6 +9,8 @@ import type { Coordinate, Cafe } from '@/types/cafe';
 import RatingPanel from '@/components/cafe/RatingPanel';
 import { CafeSidebar } from '@/components/map/CafeSidebar';
 import { useSearch } from '@/lib/search/SearchContext';
+import { loadMapState, saveMapState } from '@/lib/storage/mapStorage';
+import { useServiceWorker } from '@/hooks/useServiceWorker';
 
 interface MapViewProps {
   apiKey: string;
@@ -24,24 +26,95 @@ export default function MapView({
   const mapRef = useRef<any>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const cafeItemRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
-  const [viewState, setViewState] = useState({
-    longitude: initialCenter.lng,
-    latitude: initialCenter.lat,
-    zoom: initialZoom
+  
+  // Register service worker for map tile caching
+  useServiceWorker();
+  
+  // Load persisted state from localStorage
+  const persistedState = loadMapState();
+  
+  const [viewState, setViewStateInternal] = useState({
+    longitude: persistedState?.viewState?.longitude ?? initialCenter.lng,
+    latitude: persistedState?.viewState?.latitude ?? initialCenter.lat,
+    zoom: persistedState?.viewState?.zoom ?? initialZoom
   });
-  const [userLocation, setUserLocation] = useState<Coordinate | null>(null);
-  const [cafes, setCafes] = useState<Cafe[]>([]);
+  const [userLocation, setUserLocationInternal] = useState<Coordinate | null>(persistedState?.userLocation ?? null);
+  const [cafes, setCafesInternal] = useState<Cafe[]>(persistedState?.cafes ?? []);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [selectedCafeId, setSelectedCafeId] = useState<string | null>(null);
-  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  const [isPanelCollapsed, setIsPanelCollapsedInternal] = useState(persistedState?.isPanelCollapsed ?? false);
   const [selectedCafeForRating, setSelectedCafeForRating] = useState<Cafe | null>(null);
   const [showRatingPanel, setShowRatingPanel] = useState(false);
   
   // Use SearchContext for shared search state
-  const { searchQuery, setSearchQuery, isSearching, setIsSearching, registerSearchHandler } = useSearch();
+  const { searchQuery: searchQueryContext, setSearchQuery, isSearching, setIsSearching, registerSearchHandler } = useSearch();
+  
+  // Restore search query from localStorage (only once on mount)
+  useEffect(() => {
+    if (persistedState?.searchQuery) {
+      setSearchQuery(persistedState.searchQuery);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Use refs to track current values for saving
+  const viewStateRef = useRef(viewState);
+  const userLocationRef = useRef(userLocation);
+  const cafesRef = useRef(cafes);
+  const isPanelCollapsedRef = useRef(isPanelCollapsed);
+  const searchQueryRef = useRef(searchQueryContext);
+
+  // Update refs when state changes
+  viewStateRef.current = viewState;
+  userLocationRef.current = userLocation;
+  cafesRef.current = cafes;
+  isPanelCollapsedRef.current = isPanelCollapsed;
+  searchQueryRef.current = searchQueryContext;
+
+  // Helper function to save state
+  const saveState = () => {
+    saveMapState({
+      viewState: viewStateRef.current,
+      userLocation: userLocationRef.current,
+      cafes: cafesRef.current,
+      searchQuery: searchQueryRef.current,
+      isPanelCollapsed: isPanelCollapsedRef.current
+    });
+  };
+
+  // Wrapper setters that save automatically
+  const setViewState = (value: typeof viewState | ((prev: typeof viewState) => typeof viewState)) => {
+    setViewStateInternal(value);
+    setTimeout(saveState, 0); // Save asynchronously to avoid blocking
+  };
+
+  const setUserLocation = (value: Coordinate | null | ((prev: Coordinate | null) => Coordinate | null)) => {
+    setUserLocationInternal(value);
+    setTimeout(saveState, 0);
+  };
+
+  const setCafes = (value: Cafe[] | ((prev: Cafe[]) => Cafe[])) => {
+    setCafesInternal(value);
+    setTimeout(saveState, 0);
+  };
+
+  const setIsPanelCollapsed = (value: boolean | ((prev: boolean) => boolean)) => {
+    setIsPanelCollapsedInternal(value);
+    setTimeout(saveState, 0);
+  };
+
+  // Save when searchQuery changes (from context)
+  useEffect(() => {
+    saveState();
+  }, [searchQueryContext]);
 
   useEffect(() => {
-    // Get user's current location
+    // Get user's current location (only if we don't have a persisted location)
+    if (userLocation) {
+      // Already have location from persistence, skip geolocation
+      return;
+    }
+    
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -51,11 +124,14 @@ export default function MapView({
           };
           console.log('User location obtained:', coords);
           setUserLocation(coords);
-          setViewState({
-            longitude: coords.lng,
-            latitude: coords.lat,
-            zoom: 15
-          });
+          // Only update viewState if we don't have persisted cafes (meaning it's a fresh load)
+          if (cafes.length === 0) {
+            setViewState({
+              longitude: coords.lng,
+              latitude: coords.lat,
+              zoom: 15
+            });
+          }
         },
         (error) => {
           // Only log unexpected errors, not permission denied (common user choice)
@@ -88,7 +164,7 @@ export default function MapView({
       console.error('Geolocation is not supported by this browser.');
       setSearchError('Geolocation is not supported by your browser.');
     }
-  }, []);
+  }, [userLocation, cafes]);
 
   // Resize map when panel collapses/expands
   useEffect(() => {
@@ -215,8 +291,8 @@ export default function MapView({
     if (isSearching) {
       return;
     }
-    if (searchQuery.trim()) {
-      searchCafesByName(searchQuery);
+    if (searchQueryContext.trim()) {
+      searchCafesByName(searchQueryContext);
     }
   };
 
@@ -228,13 +304,14 @@ export default function MapView({
     if (isSearching) {
       return;
     }
-    if (searchQuery.trim()) {
-      searchCafesByName(searchQuery);
+    if (searchQueryContext.trim()) {
+      searchCafesByName(searchQueryContext);
     }
   };
 
   // Handle cafe panel item click - open rating panel
   const handleCafeClick = (cafe: Cafe) => {
+    console.log('Opening rating panel for:', cafe.name);
     setSelectedCafeId(cafe.id);
     setSelectedCafeForRating(cafe);
     setShowRatingPanel(true);
@@ -309,6 +386,21 @@ export default function MapView({
           mapboxAccessToken={apiKey}
           mapStyle="mapbox://styles/zzibo/cmhww7iqz000r01sqbilwhha0"
           style={{ width: '100%', height: '100%' }}
+          reuseMaps={true}
+          antialias={true}
+          preserveDrawingBuffer={false}
+          transformRequest={(url, resourceType) => {
+            // Add cache headers for better caching
+            if (resourceType === 'Tile' && url.startsWith('https://api.mapbox.com')) {
+              return {
+                url,
+                headers: {
+                  'Cache-Control': 'public, max-age=31536000', // 1 year
+                },
+              };
+            }
+            return { url };
+          }}
         >
           {/* Navigation controls (zoom in/out) */}
           <NavigationControl position="top-right" />
@@ -352,50 +444,52 @@ export default function MapView({
                 latitude={cafe.location.lat}
                 anchor="bottom"
               >
-                <div
-                  className={`relative group cursor-pointer ${selectedCafeId === cafe.id ? 'z-20' : ''}`}
-                  onClick={(e) => handlePinClick(cafe, e)}
-                >
-                  {/* Pin shape with coffee icon inside */}
-                  <div className={`transform transition-transform hover:scale-110 relative ${selectedCafeId === cafe.id ? 'scale-110' : ''}`}>
-                    {/* Map pin icon */}
-                    <MapPin
-                      size={pinSize}
-                      className={`drop-shadow-lg ${selectedCafeId === cafe.id ? 'text-pixel-beige' : 'text-blue-500'}`}
-                      fill={selectedCafeId === cafe.id ? '#f5e6d3' : 'white'}
-                      stroke={selectedCafeId === cafe.id ? '#f5e6d3' : 'white'}
-                    />
-                    {/* Coffee icon inside the pin - centered in the circular part */}
-                    <div
-                      className="absolute left-1/2 transform -translate-x-1/2 flex items-center justify-center"
-                      style={{
-                        top: `${iconTop}px`,
-                        width: `${iconSize}px`,
-                        height: `${iconSize}px`,
-                        backgroundColor: selectedCafeId === cafe.id ? '#f5e6d3' : 'transparent',
-                        borderRadius: 0
-                      }}
-                    >
-                      <Image
-                        src="/assets/cafe-icon.png"
-                        alt="Cafe"
-                        width={iconSize}
-                        height={iconSize}
-                        className="object-contain pixel-image"
-                        unoptimized
+                <div className="relative group">
+                  <div
+                    className={`relative cursor-pointer ${selectedCafeId === cafe.id ? 'z-20' : ''}`}
+                    onClick={(e) => handlePinClick(cafe, e)}
+                  >
+                    {/* Pin shape with coffee icon inside */}
+                    <div className={`transform transition-transform hover:scale-110 relative ${selectedCafeId === cafe.id ? 'scale-110' : ''}`}>
+                      {/* Map pin icon */}
+                      <MapPin
+                        size={pinSize}
+                        className={`drop-shadow-lg ${selectedCafeId === cafe.id ? 'text-pixel-beige' : 'text-blue-500'}`}
+                        fill={selectedCafeId === cafe.id ? '#f5e6d3' : 'white'}
+                        stroke={selectedCafeId === cafe.id ? '#f5e6d3' : 'white'}
                       />
+                      {/* Coffee icon inside the pin - centered in the circular part */}
+                      <div
+                        className="absolute left-1/2 transform -translate-x-1/2 flex items-center justify-center"
+                        style={{
+                          top: `${iconTop}px`,
+                          width: `${iconSize}px`,
+                          height: `${iconSize}px`,
+                          backgroundColor: selectedCafeId === cafe.id ? '#f5e6d3' : 'transparent',
+                          borderRadius: 0
+                        }}
+                      >
+                        <Image
+                          src="/assets/cafe-icon.png"
+                          alt="Cafe"
+                          width={iconSize}
+                          height={iconSize}
+                          className="object-contain pixel-image"
+                          unoptimized
+                        />
+                      </div>
                     </div>
                   </div>
 
                   {/* Tooltip on hover */}
                   <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                    <div className="bg-pixel-beige border-3 border-pixel-text-dark px-3 py-2 shadow-pixel-sm whitespace-nowrap" style={{ borderRadius: 0 }}>
-                      <p className="font-pixel text-xs text-pixel-text-dark">{cafe.name.toUpperCase()}</p>
-                      <p className="text-xs text-pixel-brown font-mono">
+                    <div className="bg-c2c-orange border-2 border-c2c-orange-dark px-3 py-2 shadow-lg whitespace-nowrap rounded-lg">
+                      <p className="text-xs font-bold text-white font-sans">{cafe.name}</p>
+                      <p className="text-xs text-white/90 font-sans">
                         {cafe.distance ? `${(cafe.distance / 1609.34).toFixed(2)} mi` : 'Distance unknown'}
                       </p>
                       {cafe.ratings.overall > 0 && (
-                        <p className="text-xs text-pixel-copper font-mono">★ {cafe.ratings.overall.toFixed(1)}</p>
+                        <p className="text-xs text-white/90 font-sans">★ {cafe.ratings.overall.toFixed(1)}</p>
                       )}
                     </div>
                   </div>
@@ -413,7 +507,7 @@ export default function MapView({
         cafes={cafes}
         isSearching={isSearching}
         searchError={searchError}
-        searchQuery={searchQuery}
+        searchQuery={searchQueryContext}
         onSearchQueryChange={setSearchQuery}
         onSearchSubmit={handleSearchSubmit}
         onSearchClick={handleSearchClick}
@@ -433,10 +527,10 @@ export default function MapView({
 
       {/* Location status indicator */}
       {userLocation && (
-        <div className="absolute bottom-4 left-4 bg-pixel-beige border-3 border-pixel-text-dark px-4 py-2 shadow-pixel-sm text-xs font-mono z-20" style={{ borderRadius: 0 }}>
+        <div className="absolute bottom-4 left-4 bg-c2c-orange border-2 border-c2c-orange-dark px-4 py-2 shadow-lg text-xs font-sans z-20 rounded-lg">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-pixel-copper animate-pulse" style={{ borderRadius: 0 }} />
-            <span className="text-pixel-text-dark">
+            <div className="w-2 h-2 bg-white animate-pulse rounded-full" />
+            <span className="text-white font-medium">
               LOC: {userLocation.lat.toFixed(4)}, {userLocation.lng.toFixed(4)}
             </span>
           </div>
