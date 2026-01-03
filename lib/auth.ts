@@ -187,13 +187,25 @@ export async function signOut() {
 
 /**
  * Get user profile by ID
+ * @param userId - User ID to fetch profile for
+ * @param signal - Optional AbortSignal to cancel the request
  */
-export async function getProfile(userId: string): Promise<Profile | null> {
+export async function getProfile(userId: string, signal?: AbortSignal): Promise<Profile | null> {
+  // Check if already aborted
+  if (signal?.aborted) {
+    throw new DOMException('Request aborted', 'AbortError');
+  }
+
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', userId)
     .single();
+
+  // Check if aborted during the request
+  if (signal?.aborted) {
+    throw new DOMException('Request aborted', 'AbortError');
+  }
 
   if (error) {
     if (error.code === 'PGRST116') {

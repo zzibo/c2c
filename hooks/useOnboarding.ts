@@ -7,13 +7,13 @@ import { useAuth } from '../lib/auth/AuthContext';
  * Redirects users to onboarding if they're authenticated but not onboarded
  */
 export function useOnboarding() {
-  const { user, isOnboarded, isLoading } = useAuth();
+  const { user, isOnboarded, isLoading, isProfileLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    // Don't redirect while loading
-    if (isLoading) return;
+    // Don't redirect while auth or profile is loading
+    if (isLoading || isProfileLoading) return;
 
     // Don't redirect if already on onboarding page
     if (pathname === '/onboarding') return;
@@ -25,10 +25,10 @@ export function useOnboarding() {
     if (user && !isOnboarded) {
       router.push('/onboarding');
     }
-  }, [user, isOnboarded, isLoading, pathname, router]);
+  }, [user, isOnboarded, isLoading, isProfileLoading, pathname, router]);
 
   return {
     needsOnboarding: user !== null && !isOnboarded,
-    isLoading,
+    isLoading: isLoading || isProfileLoading,
   };
 }

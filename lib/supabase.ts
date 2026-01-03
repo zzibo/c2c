@@ -1,11 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
-
-// Client-side Supabase client (safe to use in browser)
-export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
 // Type definitions for our database
 export type Cafe = {
   id: string;
