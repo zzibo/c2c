@@ -256,19 +256,24 @@ export default function RatingPanel({
     return `${Math.floor(diffDays / 365)} years ago`;
   };
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    console.log('RatingPanel: isOpen is false, not rendering');
+    return null;
+  }
+
+  console.log('RatingPanel: Rendering for cafe:', cafe.name);
 
   return (
     <>
       {/* Overlay */}
       <div
-        className="fixed inset-0 bg-black bg-opacity-30 z-40"
+        className="fixed inset-0 bg-black bg-opacity-30 z-[200]"
         onClick={onClose}
       />
 
       {/* Panel */}
       <div
-        className="fixed right-0 top-0 h-full w-[400px] bg-c2c-base border-l-2 border-c2c-orange shadow-xl z-50 overflow-y-auto"
+        className="fixed right-0 top-0 h-full w-[400px] bg-c2c-base border-l-2 border-c2c-orange shadow-xl z-[210] overflow-y-auto"
         style={{ animation: 'slideInRight 300ms ease-out' }}
       >
         {/* Header */}

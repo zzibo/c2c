@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth/AuthContext";
+import { SearchProvider } from "@/lib/search/SearchContext";
 import { AppHeader } from "@/components/layout/AppHeader";
 
 // Roboto Mono font setup
@@ -39,8 +40,10 @@ export default function RootLayout({
       </head>
       <body className={robotoMono.className}>
         <AuthProvider>
-          <AppHeader />
-          {children}
+          <SearchProvider>
+            <AppHeader />
+            {children}
+          </SearchProvider>
         </AuthProvider>
       </body>
     </html>
