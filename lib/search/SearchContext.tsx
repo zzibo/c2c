@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useContext, useState, useRef, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useRef, useCallback } from 'react';
+import type { ReactNode } from 'react';
 
 interface SearchContextType {
   searchQuery: string;

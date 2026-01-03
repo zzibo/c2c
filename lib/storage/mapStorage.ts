@@ -1,4 +1,5 @@
 import type { Coordinate, Cafe } from '@/types/cafe';
+import { MAX_AGE_MS } from './constants';
 
 interface MapViewState {
   viewState: {
@@ -14,7 +15,6 @@ interface MapViewState {
 }
 
 const STORAGE_KEY = 'c2c-map-state';
-const MAX_AGE_MS = 3600000; // 1 hour
 
 /**
  * Load persisted map state from localStorage

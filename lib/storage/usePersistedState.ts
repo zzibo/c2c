@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback } from 'react';
+import { MAX_AGE_MS } from './constants';
 
 /**
  * Custom hook that persists state to localStorage automatically
@@ -18,7 +19,7 @@ export function usePersistedState<T>(
       if (item) {
         const parsed = JSON.parse(item);
         // Check if there's a timestamp and if it's expired (1 hour)
-        if (parsed.timestamp && Date.now() - parsed.timestamp > 3600000) {
+        if (parsed.timestamp && Date.now() - parsed.timestamp > MAX_AGE_MS) {
           storage.removeItem(key);
           return initialValue;
         }
@@ -29,9 +30,6 @@ export function usePersistedState<T>(
     }
     return initialValue;
   });
-
-  // Use ref to track if this is the initial render
-  const isInitialMount = useRef(true);
 
   // Custom setter that persists to localStorage
   const setPersistedState = useCallback(
@@ -66,11 +64,6 @@ export function usePersistedState<T>(
     },
     [key, storage]
   );
-
-  // Skip persistence on initial mount (already loaded from storage)
-  useEffect(() => {
-    isInitialMount.current = false;
-  }, []);
 
   return [state, setPersistedState];
 }
