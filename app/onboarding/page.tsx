@@ -14,15 +14,16 @@ export default function OnboardingPage() {
   const [step, setStep] = useState<OnboardingStep>('username');
   const [username, setUsername] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { user, isOnboarded, refreshProfile } = useAuth();
+  const { user, profile, isOnboarded, isProfileLoading, refreshProfile } = useAuth();
   const router = useRouter();
 
-  // Redirect if already onboarded
+  // Redirect if already onboarded (only after profile finishes loading)
   useEffect(() => {
-    if (isOnboarded) {
+    // Wait for profile to finish loading before checking onboarding status
+    if (!isProfileLoading && isOnboarded) {
       router.push('/');
     }
-  }, [isOnboarded, router]);
+  }, [isOnboarded, isProfileLoading, router]);
 
   // Redirect if not authenticated
   useEffect(() => {
