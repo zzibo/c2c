@@ -40,10 +40,10 @@ export function EmailStep({ onSuccess }: EmailStepProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="text-center mb-6">
-        <h3 className="text-xl font-bold text-amber-900 mb-2">
+        <h3 className="text-xl font-bold text-gray-900 mb-2">
           Sign In
         </h3>
-        <p className="text-sm text-amber-700">
+        <p className="text-sm text-gray-700">
           We'll send you a magic code
         </p>
       </div>
@@ -70,7 +70,7 @@ export function EmailStep({ onSuccess }: EmailStepProps) {
         {isLoading ? 'Sending...' : 'Send Code'}
       </Button>
 
-      <p className="text-xs text-amber-700 text-center bg-amber-50 p-2 rounded border border-amber-300">
+      <p className="text-xs text-gray-700 text-center bg-c2c-base p-2 rounded border border-gray-300">
         No password needed. We'll email you a one-time code.
       </p>
     </form>

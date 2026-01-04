@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -8,10 +9,16 @@ import { useAuth } from '@/lib/auth/AuthContext';
 import { useSearch } from '@/lib/search/SearchContext';
 
 export function AppHeader() {
+    const pathname = usePathname();
     const { user, profile, signOut } = useAuth();
     const [showAuthModal, setShowAuthModal] = useState(false);
     const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
     const { searchQuery, setSearchQuery, onSearch, isSearching } = useSearch();
+
+    // Hide header on onboarding page
+    if (pathname === '/onboarding') {
+        return null;
+    }
 
     const userInitial =
         (profile?.username && profile.username[0]?.toUpperCase()) ||
