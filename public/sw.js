@@ -1,8 +1,22 @@
-// Service Worker for caching Mapbox tiles
+// Service Worker for caching Mapbox tiles and images
 // IMPORTANT: This constant must match lib/constants/cacheNames.ts CACHE_NAME
 // If you change this value, update lib/constants/cacheNames.ts as well
 const CACHE_NAME = 'c2c-map-cache-v1';
+const IMAGE_CACHE_NAME = 'c2c-images-v1';
 const MAPBOX_TILE_PATTERN = /^https:\/\/api\.mapbox\.com/;
+const IMAGE_URLS = [
+  '/assets/c2c-icon.webp',
+  '/assets/cafe-icon.webp',
+  '/assets/coffee.webp',
+  '/assets/vibes.webp',
+  '/assets/wifi.webp',
+  '/assets/plugs.webp',
+  '/assets/seats.webp',
+  '/assets/noise.webp',
+  '/assets/full_star.webp',
+  '/assets/half_star.webp',
+  '/assets/zero_star.webp',
+];
 const MAX_CACHE_SIZE = 100; // Maximum number of tiles to cache
 const LRU_DB_NAME = 'c2c-lru-tracker';
 const LRU_DB_VERSION = 1;
@@ -113,8 +127,21 @@ async function evictLRUEntry(cache) {
   }
 }
 
-// Install event - cache map resources
+// Install event - cache map resources and images
 self.addEventListener('install', (event) => {
+  event.waitUntil(
+    Promise.all([
+      // Cache images on install
+      caches.open(IMAGE_CACHE_NAME).then((cache) => {
+        console.log('[SW] 📦 Caching images...');
+        return cache.addAll(IMAGE_URLS.map(url => new Request(url, { cache: 'reload' })));
+      }).then(() => {
+        console.log('[SW] ✅ Images cached successfully');
+      }).catch((error) => {
+        console.warn('[SW] ⚠️ Failed to cache some images:', error);
+      })
+    ])
+  );
   self.skipWaiting();
 });
 
@@ -125,7 +152,7 @@ self.addEventListener('activate', (event) => {
       caches.keys().then((cacheNames) => {
         return Promise.all(
           cacheNames
-            .filter((name) => name !== CACHE_NAME)
+            .filter((name) => name !== CACHE_NAME && name !== IMAGE_CACHE_NAME)
             .map((name) => caches.delete(name))
         );
       }),
@@ -138,6 +165,34 @@ self.addEventListener('activate', (event) => {
 // Fetch event - serve from cache, fallback to network
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+
+  // Handle image requests
+  if (event.request.destination === 'image' && url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.open(IMAGE_CACHE_NAME).then(async (cache) => {
+        // Try cache first
+        const cachedResponse = await cache.match(event.request);
+        if (cachedResponse) {
+          console.log('[SW] ✅ Serving cached image:', url.pathname);
+          return cachedResponse;
+        }
+
+        // Fetch from network and cache
+        try {
+          const response = await fetch(event.request);
+          if (response.status === 200) {
+            await cache.put(event.request, response.clone());
+            console.log('[SW] 💾 Cached image:', url.pathname);
+          }
+          return response;
+        } catch (error) {
+          console.error('[SW] ❌ Failed to fetch image:', url.pathname, error);
+          throw error;
+        }
+      })
+    );
+    return;
+  }
 
   // Only cache Mapbox tiles
   if (MAPBOX_TILE_PATTERN.test(url.href)) {
@@ -189,7 +244,7 @@ self.addEventListener('fetch', (event) => {
           }
           
           // Try to get a generic offline tile
-          const offlineTileResponse = await cache.match('/offline-tile.png');
+          const offlineTileResponse = await cache.match('/offline-tile.webp');
           if (offlineTileResponse) {
             console.log('[SW] 🔄 Serving offline tile fallback');
             return offlineTileResponse;
