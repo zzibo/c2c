@@ -54,13 +54,16 @@ async function loadLRUState() {
       request.onsuccess = () => {
         const entries = request.result;
         lruMap = new Map(entries.map(entry => [entry.url, entry.timestamp]));
-        console.log('[SW] 📦 Loaded LRU state:', lruMap.size, 'entries');
+        // Only log in development
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[SW] 📦 Loaded LRU state:', lruMap.size, 'entries');
+        }
         resolve(lruMap);
       };
       request.onerror = () => reject(request.error);
     });
   } catch (error) {
-    console.warn('[SW] ⚠️ Failed to load LRU state:', error);
+    // Silent fail - not critical
     lruMap = new Map();
     return lruMap;
   }
@@ -77,7 +80,7 @@ async function updateLRUTimestamp(url) {
     const store = transaction.objectStore(LRU_STORE_NAME);
     await store.put({ url, timestamp });
   } catch (error) {
-    console.warn('[SW] ⚠️ Failed to persist LRU timestamp:', error);
+    // Silent fail - not critical for functionality
   }
 }
 
@@ -91,7 +94,7 @@ async function removeLRUEntry(url) {
     const store = transaction.objectStore(LRU_STORE_NAME);
     await store.delete(url);
   } catch (error) {
-    console.warn('[SW] ⚠️ Failed to remove LRU entry:', error);
+    // Silent fail - not critical
   }
 }
 
@@ -102,7 +105,6 @@ async function evictLRUEntry(cache) {
     const keys = await cache.keys();
     if (keys.length > 0) {
       await cache.delete(keys[0]);
-      console.log('[SW] 🗑️ Evicted entry (fallback):', keys[0].url);
     }
     return;
   }
@@ -123,7 +125,6 @@ async function evictLRUEntry(cache) {
     const requestToDelete = new Request(oldestUrl);
     await cache.delete(requestToDelete);
     await removeLRUEntry(oldestUrl);
-    console.log('[SW] 🗑️ Evicted LRU entry:', oldestUrl);
   }
 }
 
@@ -133,12 +134,9 @@ self.addEventListener('install', (event) => {
     Promise.all([
       // Cache images on install
       caches.open(IMAGE_CACHE_NAME).then((cache) => {
-        console.log('[SW] 📦 Caching images...');
         return cache.addAll(IMAGE_URLS.map(url => new Request(url, { cache: 'reload' })));
-      }).then(() => {
-        console.log('[SW] ✅ Images cached successfully');
       }).catch((error) => {
-        console.warn('[SW] ⚠️ Failed to cache some images:', error);
+        // Silent fail - images will be cached on first fetch
       })
     ])
   );
@@ -173,7 +171,6 @@ self.addEventListener('fetch', (event) => {
         // Try cache first
         const cachedResponse = await cache.match(event.request);
         if (cachedResponse) {
-          console.log('[SW] ✅ Serving cached image:', url.pathname);
           return cachedResponse;
         }
 
@@ -181,13 +178,21 @@ self.addEventListener('fetch', (event) => {
         try {
           const response = await fetch(event.request);
           if (response.status === 200) {
-            await cache.put(event.request, response.clone());
-            console.log('[SW] 💾 Cached image:', url.pathname);
+            // Only cache if response is small enough (images should be small)
+            const clonedResponse = response.clone();
+            const blob = await clonedResponse.blob();
+            // Only cache if under 1MB to prevent memory issues
+            if (blob.size < 1024 * 1024) {
+              await cache.put(event.request, clonedResponse);
+            }
           }
           return response;
         } catch (error) {
-          console.error('[SW] ❌ Failed to fetch image:', url.pathname, error);
-          throw error;
+          // Return error response instead of throwing
+          return new Response('Image unavailable', {
+            status: 503,
+            headers: { 'Content-Type': 'text/plain' }
+          });
         }
       })
     );
@@ -203,14 +208,12 @@ self.addEventListener('fetch', (event) => {
         // Try to match from cache
         const cachedResponse = await cache.match(event.request);
         if (cachedResponse) {
-          // Update LRU timestamp on cache hit
-          await updateLRUTimestamp(requestUrl);
-          console.log('[SW] ✅ Serving cached tile:', url.pathname);
+          // Update LRU timestamp on cache hit (fire and forget to avoid blocking)
+          updateLRUTimestamp(requestUrl).catch(() => {});
           return cachedResponse;
         }
 
         // Fetch from network
-        console.log('[SW] 🌐 Fetching tile from network:', url.pathname);
         try {
           const response = await fetch(event.request);
           
@@ -225,33 +228,26 @@ self.addEventListener('fetch', (event) => {
               await evictLRUEntry(cache);
             }
             
-            // Add to cache and update LRU
-            await cache.put(event.request, responseToCache);
-            await updateLRUTimestamp(requestUrl);
-            console.log('[SW] 💾 Cached tile:', url.pathname, `(${keys.length}/${MAX_CACHE_SIZE})`);
+            // Add to cache and update LRU (fire and forget)
+            cache.put(event.request, responseToCache).catch(() => {});
+            updateLRUTimestamp(requestUrl).catch(() => {});
           }
           
           return response;
         } catch (error) {
           // Network fetch failed - try to serve from cache
-          console.error('[SW] ❌ Network fetch failed:', url.pathname, error);
-          
-          // Try to get any cached version of this request
-          const cachedResponse = await cache.match(event.request);
-          if (cachedResponse) {
-            console.log('[SW] 🔄 Serving stale cached tile:', url.pathname);
-            return cachedResponse;
+          const staleCachedResponse = await cache.match(event.request);
+          if (staleCachedResponse) {
+            return staleCachedResponse;
           }
           
           // Try to get a generic offline tile
           const offlineTileResponse = await cache.match('/offline-tile.webp');
           if (offlineTileResponse) {
-            console.log('[SW] 🔄 Serving offline tile fallback');
             return offlineTileResponse;
           }
           
           // Last resort: return a minimal error response
-          console.warn('[SW] ⚠️ No cached fallback available, returning error response');
           return new Response('Tile unavailable', {
             status: 503,
             statusText: 'Service Unavailable',
