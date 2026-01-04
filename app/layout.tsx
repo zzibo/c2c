@@ -38,7 +38,19 @@ export default function RootLayout({
   return (
     <html lang="en" className={robotoMono.variable}>
       <head>
-        <link rel="icon" href="/assets/c2c-icon.png" type="image/png" />
+        <link rel="icon" href="/assets/c2c-icon.webp" type="image/webp" />
+        {/* Preload critical images */}
+        <link rel="preload" href="/assets/c2c-icon.webp" as="image" />
+        <link rel="preload" href="/assets/full_star.webp" as="image" />
+        <link rel="preload" href="/assets/half_star.webp" as="image" />
+        <link rel="preload" href="/assets/zero_star.webp" as="image" />
+        <link rel="preload" href="/assets/cafe-icon.webp" as="image" />
+        <link rel="preload" href="/assets/coffee.webp" as="image" />
+        <link rel="preload" href="/assets/vibes.webp" as="image" />
+        <link rel="preload" href="/assets/wifi.webp" as="image" />
+        <link rel="preload" href="/assets/plugs.webp" as="image" />
+        <link rel="preload" href="/assets/seats.webp" as="image" />
+        <link rel="preload" href="/assets/noise.webp" as="image" />
       </head>
       <body className={robotoMono.className}>
         <AuthProvider>

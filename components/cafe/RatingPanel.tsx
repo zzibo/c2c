@@ -273,12 +273,14 @@ export default function RatingPanel({
           {/* Logo Section - 15% */}
           <div className="h-[15vh] flex items-center justify-center bg-gray-50 border-b-2 border-c2c-orange relative">
             <Image
-              src="/assets/c2c-icon.png"
+              src="/assets/c2c-icon.webp"
               alt="C2C"
               width={80}
               height={80}
               className="object-contain pixel-image"
               unoptimized
+              priority
+              fetchPriority="high"
             />
             {/* Close button */}
             <button
@@ -385,13 +387,14 @@ export default function RatingPanel({
                   <div className="space-y-3">
                     {/* Coffee */}
                     <div className="flex items-center gap-2">
-                      <Image
-                        src="/assets/coffee.png"
+                      <img
+                        src="/assets/coffee.webp"
                         alt="Coffee"
                         width={30}
                         height={30}
                         className="object-contain pixel-image flex-shrink-0"
-                        unoptimized
+                        loading="eager"
+                        decoding="async"
                       />
                       <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Coffee</span>
                       <StarRating
@@ -405,13 +408,14 @@ export default function RatingPanel({
 
                     {/* Vibe */}
                     <div className="flex items-center gap-2">
-                      <Image
-                        src="/assets/vibes.png"
+                      <img
+                        src="/assets/vibes.webp"
                         alt="Vibe"
                         width={30}
                         height={30}
                         className="object-contain pixel-image flex-shrink-0"
-                        unoptimized
+                        loading="eager"
+                        decoding="async"
                       />
                       <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Vibe</span>
                       <StarRating
@@ -425,13 +429,14 @@ export default function RatingPanel({
 
                     {/* WiFi */}
                     <div className="flex items-center gap-2">
-                      <Image
-                        src="/assets/wifi.png"
+                      <img
+                        src="/assets/wifi.webp"
                         alt="WiFi"
                         width={30}
                         height={30}
                         className="object-contain pixel-image flex-shrink-0"
-                        unoptimized
+                        loading="eager"
+                        decoding="async"
                       />
                       <span className="text-xs text-c2c-orange w-16 flex-shrink-0">WiFi</span>
                       <StarRating
@@ -445,13 +450,14 @@ export default function RatingPanel({
 
                     {/* Outlets */}
                     <div className="flex items-center gap-2">
-                      <Image
-                        src="/assets/plugs.png"
+                      <img
+                        src="/assets/plugs.webp"
                         alt="Outlets"
-                          width={30}
-                          height={30}
+                        width={30}
+                        height={30}
                         className="object-contain pixel-image flex-shrink-0"
-                        unoptimized
+                        loading="eager"
+                        decoding="async"
                       />
                       <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Outlets</span>
                       <StarRating
@@ -465,13 +471,14 @@ export default function RatingPanel({
 
                     {/* Seating */}
                     <div className="flex items-center gap-2">
-                      <Image
-                        src="/assets/seats.png"
+                      <img
+                        src="/assets/seats.webp"
                         alt="Seating"
-                          width={30}
-                          height={30}
+                        width={30}
+                        height={30}
                         className="object-contain pixel-image flex-shrink-0"
-                        unoptimized
+                        loading="eager"
+                        decoding="async"
                       />
                       <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Seating</span>
                       <StarRating
@@ -485,13 +492,14 @@ export default function RatingPanel({
 
                     {/* Noise */}
                     <div className="flex items-center gap-2">
-                      <Image
-                        src="/assets/noise.png"
+                      <img
+                        src="/assets/noise.webp"
                         alt="Noise"
-                          width={30}
-                          height={30}
+                        width={30}
+                        height={30}
                         className="object-contain pixel-image flex-shrink-0"
-                        unoptimized
+                        loading="eager"
+                        decoding="async"
                       />
                       <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Noise</span>
                       <StarRating
