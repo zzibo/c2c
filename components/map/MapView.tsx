@@ -70,6 +70,10 @@ export default function MapView({
   isPanelCollapsedRef.current = isPanelCollapsed;
   searchQueryRef.current = searchQueryContext;
 
+  // Debounce timer for saving state
+  const saveStateTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const DEBOUNCE_DELAY = 500; // Save 500ms after user stops interacting
+
   // Helper function to save state
   const saveState = () => {
     saveMapState({
@@ -81,31 +85,53 @@ export default function MapView({
     });
   };
 
+  // Debounced save function
+  const debouncedSaveState = useCallback(() => {
+    // Clear existing timer
+    if (saveStateTimerRef.current) {
+      clearTimeout(saveStateTimerRef.current);
+    }
+    // Set new timer
+    saveStateTimerRef.current = setTimeout(() => {
+      saveState();
+      saveStateTimerRef.current = null;
+    }, DEBOUNCE_DELAY);
+  }, []);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (saveStateTimerRef.current) {
+        clearTimeout(saveStateTimerRef.current);
+      }
+    };
+  }, []);
+
   // Wrapper setters that save automatically
   const setViewState = (value: typeof viewState | ((prev: typeof viewState) => typeof viewState)) => {
     setViewStateInternal(value);
-    setTimeout(saveState, 0); // Save asynchronously to avoid blocking
+    debouncedSaveState(); // Debounced save to avoid excessive writes
   };
 
   const setUserLocation = (value: Coordinate | null | ((prev: Coordinate | null) => Coordinate | null)) => {
     setUserLocationInternal(value);
-    setTimeout(saveState, 0);
+    debouncedSaveState();
   };
 
   const setCafes = (value: Cafe[] | ((prev: Cafe[]) => Cafe[])) => {
     setCafesInternal(value);
-    setTimeout(saveState, 0);
+    debouncedSaveState();
   };
 
   const setIsPanelCollapsed = (value: boolean | ((prev: boolean) => boolean)) => {
     setIsPanelCollapsedInternal(value);
-    setTimeout(saveState, 0);
+    debouncedSaveState();
   };
 
-  // Save when searchQuery changes (from context)
+  // Save when searchQuery changes (from context) - debounced
   useEffect(() => {
-    saveState();
-  }, [searchQueryContext]);
+    debouncedSaveState();
+  }, [searchQueryContext, debouncedSaveState]);
 
   useEffect(() => {
     // Get user's current location (only if we don't have a persisted location)
