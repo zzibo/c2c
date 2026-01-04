@@ -5,8 +5,8 @@ import Image from 'next/image';
 import { X, Edit2 } from 'lucide-react';
 import type { Cafe, Rating, RatingWithUser } from '@/types/cafe';
 import StarRating from '@/components/ui/StarRating';
-import LoginModal from '@/components/auth/LoginModal';
-import { getSession } from '@/lib/auth';
+import { AuthModal } from '@/components/auth/AuthModal';
+import { useAuth } from '@/lib/auth/AuthContext';
 
 interface RatingPanelProps {
   cafe: Cafe;
@@ -38,8 +38,8 @@ export default function RatingPanel({
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const { user } = useAuth();
 
   const [formData, setFormData] = useState<RatingFormData>({
     coffee_rating: null,
@@ -60,12 +60,8 @@ export default function RatingPanel({
       setError(null);
 
       try {
-        // Check if user is authenticated
-        const session = await getSession();
-        setIsAuthenticated(!!session);
-
         // Fetch user's existing rating (if authenticated)
-        if (session) {
+        if (user) {
           const checkResponse = await fetch(
             `/api/ratings/check?cafe_id=${cafe.id}`
           );
@@ -95,6 +91,8 @@ export default function RatingPanel({
               comment: '',
             });
           }
+        } else {
+          setUserRating(null);
         }
 
         // Fetch all ratings for this cafe
@@ -113,7 +111,7 @@ export default function RatingPanel({
     };
 
     fetchData();
-  }, [isOpen, cafe]);
+  }, [isOpen, cafe, user]);
 
   // Handle rating changes
   const handleRatingChange = (category: keyof RatingFormData, value: number) => {
@@ -151,7 +149,7 @@ export default function RatingPanel({
 
   // Submit rating
   const handleSubmit = async () => {
-    if (!isAuthenticated) {
+    if (!user) {
       setError('Please sign in to submit a rating');
       return;
     }
@@ -265,12 +263,6 @@ export default function RatingPanel({
 
   return (
     <>
-      {/* Overlay */}
-      <div
-        className="fixed inset-0 bg-black bg-opacity-30 z-[200]"
-        onClick={onClose}
-      />
-
       {/* Panel */}
       <div
         className="fixed right-0 top-0 h-full w-[400px] bg-c2c-base border-l-2 border-c2c-orange shadow-xl z-[210] overflow-y-auto"
@@ -343,7 +335,7 @@ export default function RatingPanel({
               )}
 
               {/* Authentication Warning */}
-              {!isAuthenticated && (
+              {!user && (
                 <div className="mb-4 bg-c2c-orange/10 text-c2c-orange px-4 py-3 rounded border border-c2c-orange/30">
                   <p className="text-sm mb-2">Please sign in to rate this cafe</p>
                   <button
@@ -405,7 +397,7 @@ export default function RatingPanel({
                       <StarRating
                         rating={formData.coffee_rating || 0}
                         size={20}
-                        interactive={isAuthenticated}
+                        interactive={!!user}
                         onChange={(rating) => handleRatingChange('coffee_rating', rating)}
                         showNumber={true}
                       />
@@ -425,7 +417,7 @@ export default function RatingPanel({
                       <StarRating
                         rating={formData.vibe_rating || 0}
                         size={20}
-                        interactive={isAuthenticated}
+                        interactive={!!user}
                         onChange={(rating) => handleRatingChange('vibe_rating', rating)}
                         showNumber={true}
                       />
@@ -445,7 +437,7 @@ export default function RatingPanel({
                       <StarRating
                         rating={formData.wifi_rating || 0}
                         size={20}
-                        interactive={isAuthenticated}
+                        interactive={!!user}
                         onChange={(rating) => handleRatingChange('wifi_rating', rating)}
                         showNumber={true}
                       />
@@ -465,7 +457,7 @@ export default function RatingPanel({
                       <StarRating
                         rating={formData.outlets_rating || 0}
                         size={20}
-                        interactive={isAuthenticated}
+                        interactive={!!user}
                         onChange={(rating) => handleRatingChange('outlets_rating', rating)}
                         showNumber={true}
                       />
@@ -485,7 +477,7 @@ export default function RatingPanel({
                       <StarRating
                         rating={formData.seating_rating || 0}
                         size={20}
-                        interactive={isAuthenticated}
+                        interactive={!!user}
                         onChange={(rating) => handleRatingChange('seating_rating', rating)}
                         showNumber={true}
                       />
@@ -505,7 +497,7 @@ export default function RatingPanel({
                       <StarRating
                         rating={formData.noise_rating || 0}
                         size={20}
-                        interactive={isAuthenticated}
+                        interactive={!!user}
                         onChange={(rating) => handleRatingChange('noise_rating', rating)}
                         showNumber={true}
                       />
@@ -519,7 +511,7 @@ export default function RatingPanel({
                       <textarea
                         value={formData.comment}
                         onChange={handleCommentChange}
-                        disabled={!isAuthenticated}
+                        disabled={!user}
                         placeholder="Share your experience..."
                         className="w-full px-3 py-2 text-sm bg-white border border-c2c-orange rounded focus:outline-none focus:ring-2 focus:ring-c2c-orange text-c2c-orange placeholder-c2c-orange/60 disabled:opacity-50 disabled:cursor-not-allowed"
                         rows={3}
@@ -534,7 +526,7 @@ export default function RatingPanel({
                     <div className="flex gap-2 mt-4">
                       <button
                         onClick={handleSubmit}
-                        disabled={!isAuthenticated || isSubmitting}
+                        disabled={!user || isSubmitting}
                         className="flex-1 bg-c2c-orange hover:bg-c2c-orange-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-all text-sm font-medium"
                       >
                         {isSubmitting
@@ -634,36 +626,9 @@ export default function RatingPanel({
       </div>
 
       {/* Login Modal */}
-      <LoginModal
+      <AuthModal
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
-        onSuccess={async () => {
-          // Refresh authentication status
-          const session = await getSession();
-          setIsAuthenticated(!!session);
-
-          // Reload user rating and all ratings
-          if (session) {
-            try {
-              const checkResponse = await fetch(`/api/ratings/check?cafe_id=${cafe.id}`);
-              const checkData = await checkResponse.json();
-              if (checkData.hasRated && checkData.rating) {
-                setUserRating(checkData.rating);
-                setFormData({
-                  coffee_rating: checkData.rating.coffee_rating,
-                  vibe_rating: checkData.rating.vibe_rating,
-                  wifi_rating: checkData.rating.wifi_rating,
-                  outlets_rating: checkData.rating.outlets_rating,
-                  seating_rating: checkData.rating.seating_rating,
-                  noise_rating: checkData.rating.noise_rating,
-                  comment: checkData.rating.comment || '',
-                });
-              }
-            } catch (err) {
-              console.error('Error refreshing after login:', err);
-            }
-          }
-        }}
       />
 
       {/* Add CSS animation */}

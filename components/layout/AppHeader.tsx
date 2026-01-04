@@ -15,11 +15,6 @@ export function AppHeader() {
     const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
     const { searchQuery, setSearchQuery, onSearch, isSearching } = useSearch();
 
-    // Hide header on onboarding page
-    if (pathname === '/onboarding') {
-        return null;
-    }
-
     const userInitial =
         (profile?.username && profile.username[0]?.toUpperCase()) ||
         (user?.email && user.email[0]?.toUpperCase()) ||
@@ -37,6 +32,11 @@ export function AppHeader() {
             onSearch(searchQuery.trim());
         }
     };
+
+    // Hide header on onboarding page
+    if (pathname === '/onboarding') {
+        return null;
+    }
 
     return (
         <>

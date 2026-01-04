@@ -3,7 +3,9 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth/AuthContext";
 import { SearchProvider } from "@/lib/search/SearchContext";
+import { ToastProvider } from "@/lib/toast/ToastContext";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { WelcomeBackHandler } from "@/components/auth/WelcomeBackHandler";
 
 // Roboto Mono font setup
 const robotoMono = localFont({
@@ -41,8 +43,11 @@ export default function RootLayout({
       <body className={robotoMono.className}>
         <AuthProvider>
           <SearchProvider>
-            <AppHeader />
-            {children}
+            <ToastProvider>
+              <WelcomeBackHandler />
+              <AppHeader />
+              {children}
+            </ToastProvider>
           </SearchProvider>
         </AuthProvider>
       </body>
