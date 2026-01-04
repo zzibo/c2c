@@ -79,10 +79,10 @@ export default function StarRating({
 
     const starImage =
       starType === 'full'
-        ? '/assets/full_star.png'
+        ? '/assets/full_star.webp'
         : starType === 'half'
-        ? '/assets/half_star.png'
-        : '/assets/zero_star.png';
+        ? '/assets/half_star.webp'
+        : '/assets/zero_star.webp';
 
     return (
       <div
@@ -97,6 +97,8 @@ export default function StarRating({
           height={size}
           className="object-contain pixel-image"
           unoptimized
+          priority={index < 5}
+          fetchPriority={index < 5 ? "high" : "auto"}
           draggable={false}
         />
       </div>
