@@ -77,13 +77,13 @@ export function OTPStep({ email, onSuccess, onBack }: OTPStepProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="text-center mb-6">
-        <h3 className="text-xl font-bold text-amber-900 mb-2">
+        <h3 className="text-xl font-bold text-gray-900 mb-2">
           Check Your Email
         </h3>
-        <p className="text-sm text-amber-700">
+        <p className="text-sm text-gray-700">
           We sent a code to
         </p>
-        <p className="text-sm text-amber-900 font-semibold mt-1 bg-amber-50 px-3 py-2 rounded border border-amber-300 inline-block">
+        <p className="text-sm text-gray-900 font-semibold mt-1 bg-c2c-base px-3 py-2 rounded border border-gray-300 inline-block">
           {email}
         </p>
       </div>
@@ -118,7 +118,7 @@ export function OTPStep({ email, onSuccess, onBack }: OTPStepProps) {
         <button
           type="button"
           onClick={onBack}
-          className="text-sm text-amber-700 hover:text-amber-900 font-medium transition-colors"
+          className="text-sm text-gray-700 hover:text-gray-900 font-medium transition-colors"
         >
           ← Change Email
         </button>
@@ -127,7 +127,7 @@ export function OTPStep({ email, onSuccess, onBack }: OTPStepProps) {
           type="button"
           onClick={handleResend}
           disabled={!canResend}
-          className="text-sm text-amber-700 hover:text-amber-900 font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="text-sm text-gray-700 hover:text-gray-900 font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {canResend ? 'Resend Code' : `Resend in ${resendCountdown}s`}
         </button>
