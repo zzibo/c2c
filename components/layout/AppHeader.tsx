@@ -46,13 +46,14 @@ export function AppHeader() {
                     {/* Logo */}
                     <div className="flex  justify-center items-center gap-2">
                         <Image
-                            src="/assets/c2c-icon.png"
+                            src="/assets/c2c-icon.webp"
                             alt="C2C"
                             width={32}
                             height={32}
                             className="w-8 h-8"
                             unoptimized
                             priority
+                            fetchPriority="high"
                         />
 
                     </div>
