@@ -112,27 +112,27 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
       />
 
       {/* Modal */}
-      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-amber-50 border-2 border-amber-900 shadow-xl z-50 w-full max-w-md p-6">
+      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-c2c-base border-2 border-gray-900 shadow-xl z-50 w-full max-w-md p-6">
         {/* Close button */}
         <button
           onClick={handleClose}
-          className="absolute top-4 right-4 p-1 hover:bg-amber-200 rounded transition-colors"
+          className="absolute top-4 right-4 p-1 hover:bg-gray-100 rounded transition-colors"
           aria-label="Close"
         >
-          <X size={20} className="text-amber-900" />
+          <X size={20} className="text-gray-900" />
         </button>
 
         {/* Step 1: Email Input */}
         {step === 'email' && (
           <>
-            <h2 className="text-xl font-bold text-amber-900 mb-2">Sign In</h2>
-            <p className="text-sm text-amber-700 mb-4">
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Sign In</h2>
+            <p className="text-sm text-gray-700 mb-4">
               Enter your email to receive a verification code
             </p>
 
             <form onSubmit={handleSendOTP}>
               <div className="mb-4">
-                <label className="block text-sm text-amber-800 mb-2">
+                <label className="block text-sm text-gray-900 mb-2">
                   Email Address
                 </label>
                 <input
@@ -142,12 +142,12 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
                   placeholder="your@email.com"
                   required
                   disabled={loading}
-                  className="w-full px-3 py-2 text-sm bg-white border border-amber-700 rounded focus:outline-none focus:ring-2 focus:ring-amber-600 text-amber-900 placeholder-amber-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-3 py-2 text-sm bg-white border border-gray-400 rounded focus:outline-none focus:ring-2 focus:ring-c2c-orange text-gray-900 placeholder-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
               {error && (
-                <div className="mb-4 bg-red-100 text-red-800 px-3 py-2 rounded text-sm border border-red-300">
+                <div className="mb-4 bg-red-50 border-red-400 text-red-700 px-3 py-2 rounded text-sm border">
                   {error}
                 </div>
               )}
@@ -155,7 +155,7 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
               <button
                 type="submit"
                 disabled={loading || !email}
-                className="w-full bg-amber-700 hover:bg-amber-800 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-all text-sm font-medium"
+                className="w-full bg-c2c-orange hover:bg-c2c-orange-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-all text-sm font-medium"
               >
                 {loading ? 'Sending Code...' : 'Send Verification Code'}
               </button>
@@ -166,15 +166,15 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
         {/* Step 2: OTP Input */}
         {step === 'otp' && (
           <>
-            <h2 className="text-xl font-bold text-amber-900 mb-2">Enter Code</h2>
-            <p className="text-sm text-amber-700 mb-4">
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Enter Code</h2>
+            <p className="text-sm text-gray-700 mb-4">
               We sent a 6-digit code to{' '}
               <span className="font-semibold">{email}</span>
             </p>
 
             <form onSubmit={handleVerifyOTP}>
               <div className="mb-4">
-                <label className="block text-sm text-amber-800 mb-2">
+                <label className="block text-sm text-gray-900 mb-2">
                   Verification Code
                 </label>
                 <input
@@ -185,16 +185,16 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
                   required
                   disabled={loading}
                   maxLength={6}
-                  className="w-full px-3 py-2 text-2xl text-center font-mono tracking-widest bg-white border border-amber-700 rounded focus:outline-none focus:ring-2 focus:ring-amber-600 text-amber-900 placeholder-amber-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-3 py-2 text-2xl text-center font-mono tracking-widest bg-white border border-gray-400 rounded focus:outline-none focus:ring-2 focus:ring-c2c-orange text-gray-900 placeholder-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   autoFocus
                 />
-                <p className="text-xs text-amber-600 mt-1 text-center">
+                <p className="text-xs text-gray-500 mt-1 text-center">
                   {otp.length}/6 digits
                 </p>
               </div>
 
               {error && (
-                <div className="mb-4 bg-red-100 text-red-800 px-3 py-2 rounded text-sm border border-red-300">
+                <div className="mb-4 bg-red-50 border-red-400 text-red-700 px-3 py-2 rounded text-sm border">
                   {error}
                 </div>
               )}
@@ -202,7 +202,7 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
               <button
                 type="submit"
                 disabled={loading || otp.length !== 6}
-                className="w-full bg-amber-700 hover:bg-amber-800 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-all text-sm font-medium mb-3"
+                className="w-full bg-c2c-orange hover:bg-c2c-orange-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-all text-sm font-medium mb-3"
               >
                 {loading ? 'Verifying...' : 'Verify & Sign In'}
               </button>
@@ -213,7 +213,7 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
                   type="button"
                   onClick={handleResendOTP}
                   disabled={loading}
-                  className="text-amber-700 hover:text-amber-900 underline disabled:opacity-50"
+                  className="text-gray-700 hover:text-gray-900 underline disabled:opacity-50"
                 >
                   Resend Code
                 </button>
@@ -224,7 +224,7 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
                     setOtp('');
                     setError(null);
                   }}
-                  className="text-amber-700 hover:text-amber-900 underline"
+                  className="text-gray-700 hover:text-gray-900 underline"
                 >
                   Change Email
                 </button>
@@ -234,8 +234,8 @@ export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalPro
         )}
 
         {/* Footer */}
-        <div className="mt-6 pt-4 border-t border-amber-300">
-          <p className="text-xs text-amber-600 text-center">
+        <div className="mt-6 pt-4 border-t border-gray-300">
+          <p className="text-xs text-gray-500 text-center">
             By signing in, you agree to our Terms of Service and Privacy Policy
           </p>
         </div>
