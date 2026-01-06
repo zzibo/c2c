@@ -29,11 +29,12 @@ export interface CafeRatings {
 }
 
 export interface Cafe {
-  id: string;
+  id: string;  // Database UUID (preferred) or geoapify_place_id (legacy)
+  geoapifyPlaceId?: string;  // External Geoapify reference
   name: string;
   location: Coordinate;
   address: string;
-  placeId: string;
+  placeId: string;  // Deprecated - use geoapifyPlaceId
 
   ratings: CafeRatings;
   totalReviews: number;

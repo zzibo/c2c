@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/auth/AuthContext";
 import { SearchProvider } from "@/lib/search/SearchContext";
 import { ToastProvider } from "@/lib/toast/ToastContext";
+import { QueryProvider } from "@/lib/query/QueryProvider";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { WelcomeBackHandler } from "@/components/auth/WelcomeBackHandler";
 
@@ -53,15 +54,17 @@ export default function RootLayout({
         <link rel="preload" href="/assets/noise.webp" as="image" />
       </head>
       <body className={robotoMono.className}>
-        <AuthProvider>
-          <SearchProvider>
-            <ToastProvider>
-              <WelcomeBackHandler />
-              <AppHeader />
-              {children}
-            </ToastProvider>
-          </SearchProvider>
-        </AuthProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <SearchProvider>
+              <ToastProvider>
+                <WelcomeBackHandler />
+                <AppHeader />
+                {children}
+              </ToastProvider>
+            </SearchProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

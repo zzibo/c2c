@@ -29,28 +29,21 @@ export async function GET(request: NextRequest) {
 
     const user_id = session.user.id;
 
-    // Look up cafe by geoapify_place_id (frontend sends this as cafe.id)
-    const { data: cafeData, error: cafeError } = await supabaseAdmin
-      .from('cafes')
-      .select('id')
-      .eq('geoapify_place_id', cafe_id)
-      .single();
+    // ✅ PERFORMANCE FIX: Assume cafe_id is UUID (no lookup needed!)
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cafe_id);
 
-    if (cafeError || !cafeData) {
-      console.error('Error looking up cafe:', cafeError || 'Cafe not found', { cafe_id });
+    if (!isUUID) {
       return NextResponse.json(
-        { error: `Cafe not found: ${cafe_id}` },
-        { status: 404 }
+        { error: 'Invalid cafe ID format. Expected UUID.' },
+        { status: 400 }
       );
     }
 
-    const cafe_uuid = cafeData.id;
-
-    // Query for existing rating
+    // Query for existing rating - using cafe_id directly (it's already a UUID!)
     const { data: rating, error } = await supabaseAdmin
       .from('ratings')
       .select('*')
-      .eq('cafe_id', cafe_uuid)
+      .eq('cafe_id', cafe_id)  // ✅ No lookup needed!
       .eq('user_id', user_id)
       .single();
 
