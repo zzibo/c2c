@@ -57,15 +57,18 @@ export async function GET(request: NextRequest) {
       console.log(`✅ Cache HIT: Returning ${dbCafes.length} cafes from database`);
 
       // Transform to match frontend interface
+      // ✅ PERFORMANCE FIX: Use database UUID as ID (not geoapify_place_id)
+      // This eliminates the need for lookups in rating APIs
       const cafes = dbCafes.map((cafe: any) => ({
-        id: cafe.geoapify_place_id,
+        id: cafe.id,  // ✅ Use database UUID
+        geoapifyPlaceId: cafe.geoapify_place_id,  // Keep as metadata
         name: cafe.display_name || cafe.name,
         location: {
           lat: cafe.latitude,
           lng: cafe.longitude,
         },
         address: cafe.address || '',
-        placeId: cafe.geoapify_place_id,
+        placeId: cafe.geoapify_place_id,  // Deprecated - use geoapifyPlaceId
         ratings: {
           coffee: cafe.avg_coffee || 0,
           vibe: cafe.avg_vibe || 0,
@@ -192,15 +195,17 @@ export async function GET(request: NextRequest) {
     });
 
     // Transform to frontend format
+    // ✅ PERFORMANCE FIX: Use database UUID as ID
     const cafes = (allCafes || []).map((cafe: any) => ({
-      id: cafe.geoapify_place_id,
+      id: cafe.id,  // ✅ Use database UUID
+      geoapifyPlaceId: cafe.geoapify_place_id,
       name: cafe.display_name || cafe.name,
       location: {
         lat: cafe.latitude,
         lng: cafe.longitude,
       },
       address: cafe.address || '',
-      placeId: cafe.geoapify_place_id,
+      placeId: cafe.geoapify_place_id,  // Deprecated
       ratings: {
         coffee: cafe.avg_coffee || 0,
         vibe: cafe.avg_vibe || 0,

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { X, Edit2 } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Cafe, Rating, RatingWithUser } from '@/types/cafe';
 import StarRating from '@/components/ui/StarRating';
 import { AuthModal } from '@/components/auth/AuthModal';
@@ -31,15 +32,12 @@ export default function RatingPanel({
   onClose,
   onRatingSubmitted,
 }: RatingPanelProps) {
-  const [userRating, setUserRating] = useState<Rating | null>(null);
-  const [allRatings, setAllRatings] = useState<RatingWithUser[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   const [formData, setFormData] = useState<RatingFormData>({
     coffee_rating: null,
@@ -51,67 +49,59 @@ export default function RatingPanel({
     comment: '',
   });
 
-  // Check authentication and fetch data
+  // ✅ PERFORMANCE FIX: Fetch user's rating with React Query
+  const { data: userRatingData } = useQuery({
+    queryKey: ['user-rating', cafe.id, user?.id],
+    queryFn: async () => {
+      if (!user) return { hasRated: false, rating: null };
+      const res = await fetch(`/api/ratings/check?cafe_id=${cafe.id}`);
+      if (!res.ok) throw new Error('Failed to check rating');
+      return res.json();
+    },
+    enabled: isOpen && !!cafe.id,  // Only fetch when panel is open
+    staleTime: 60000,  // Cache for 1 minute
+  });
+
+  // ✅ PERFORMANCE FIX: Fetch all ratings with React Query (parallel with above!)
+  const { data: ratingsData, isLoading } = useQuery({
+    queryKey: ['cafe-ratings', cafe.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/cafes/${cafe.id}/ratings`);
+      if (!res.ok) throw new Error('Failed to fetch ratings');
+      return res.json();
+    },
+    enabled: isOpen && !!cafe.id,  // Only fetch when panel is open
+    staleTime: 60000,  // Cache for 1 minute
+  });
+
+  const allRatings = ratingsData?.ratings || [];
+  const userRating = userRatingData?.rating || null;
+
+  // Update form when user rating changes
   useEffect(() => {
-    if (!isOpen || !cafe) return;
-
-    const fetchData = async () => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        // Fetch user's existing rating (if authenticated)
-        if (user) {
-          const checkResponse = await fetch(
-            `/api/ratings/check?cafe_id=${cafe.id}`
-          );
-          const checkData = await checkResponse.json();
-
-          if (checkData.hasRated && checkData.rating) {
-            setUserRating(checkData.rating);
-            setFormData({
-              coffee_rating: checkData.rating.coffee_rating,
-              vibe_rating: checkData.rating.vibe_rating,
-              wifi_rating: checkData.rating.wifi_rating,
-              outlets_rating: checkData.rating.outlets_rating,
-              seating_rating: checkData.rating.seating_rating,
-              noise_rating: checkData.rating.noise_rating,
-              comment: checkData.rating.comment || '',
-            });
-          } else {
-            setUserRating(null);
-            // Reset form for new rating
-            setFormData({
-              coffee_rating: null,
-              vibe_rating: null,
-              wifi_rating: null,
-              outlets_rating: null,
-              seating_rating: null,
-              noise_rating: null,
-              comment: '',
-            });
-          }
-        } else {
-          setUserRating(null);
-        }
-
-        // Fetch all ratings for this cafe
-        const ratingsResponse = await fetch(`/api/cafes/${cafe.id}/ratings`);
-        const ratingsData = await ratingsResponse.json();
-
-        if (ratingsData.ratings) {
-          setAllRatings(ratingsData.ratings);
-        }
-      } catch (err) {
-        console.error('Error fetching ratings:', err);
-        setError('Failed to load ratings');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [isOpen, cafe, user]);
+    if (userRating) {
+      setFormData({
+        coffee_rating: userRating.coffee_rating,
+        vibe_rating: userRating.vibe_rating,
+        wifi_rating: userRating.wifi_rating,
+        outlets_rating: userRating.outlets_rating,
+        seating_rating: userRating.seating_rating,
+        noise_rating: userRating.noise_rating,
+        comment: userRating.comment || '',
+      });
+    } else {
+      // Reset form for new rating
+      setFormData({
+        coffee_rating: null,
+        vibe_rating: null,
+        wifi_rating: null,
+        outlets_rating: null,
+        seating_rating: null,
+        noise_rating: null,
+        comment: '',
+      });
+    }
+  }, [userRating]);
 
   // Handle rating changes
   const handleRatingChange = (category: keyof RatingFormData, value: number) => {
@@ -147,8 +137,113 @@ export default function RatingPanel({
     return null;
   };
 
-  // Submit rating
-  const handleSubmit = async () => {
+  // ✅ PERFORMANCE FIX: Use React Query mutation with optimistic updates
+  const submitMutation = useMutation({
+    mutationFn: async (payload: typeof formData & { cafe_id: string }) => {
+      const url = userRating ? `/api/ratings/${userRating.id}` : '/api/ratings';
+      const method = userRating ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to submit rating');
+      }
+
+      return response.json();
+    },
+    onMutate: async (payload) => {
+      // ✅ Cancel outgoing queries
+      await queryClient.cancelQueries({ queryKey: ['cafe-ratings', cafe.id] });
+      await queryClient.cancelQueries({ queryKey: ['user-rating', cafe.id, user?.id] });
+
+      // ✅ Snapshot previous values
+      const previousRatings = queryClient.getQueryData(['cafe-ratings', cafe.id]);
+      const previousUserRating = queryClient.getQueryData(['user-rating', cafe.id, user?.id]);
+
+      // ✅ INSTANT UI UPDATE: Optimistically update cache
+      if (user) {
+        const optimisticRating = {
+          ...payload,
+          id: userRating?.id || 'temp-id',
+          user_id: user.id,
+          username: user.email || 'You',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          overall_rating: calculateOverallRating(payload),
+        };
+
+        // Update user rating
+        queryClient.setQueryData(['user-rating', cafe.id, user.id], {
+          hasRated: true,
+          rating: optimisticRating,
+        });
+
+        // Update ratings list
+        queryClient.setQueryData(['cafe-ratings', cafe.id], (old: any) => {
+          if (!old) return { ratings: [optimisticRating], total_count: 1 };
+
+          const existingRatings = old.ratings || [];
+          const newRatings = userRating
+            ? existingRatings.map((r: any) => r.id === userRating.id ? optimisticRating : r)
+            : [optimisticRating, ...existingRatings];
+
+          return {
+            ...old,
+            ratings: newRatings,
+            total_count: newRatings.length,
+          };
+        });
+      }
+
+      return { previousRatings, previousUserRating };
+    },
+    onError: (err, variables, context) => {
+      // ✅ Rollback on error
+      if (context) {
+        queryClient.setQueryData(['cafe-ratings', cafe.id], context.previousRatings);
+        queryClient.setQueryData(['user-rating', cafe.id, user?.id], context.previousUserRating);
+      }
+      setError(err instanceof Error ? err.message : 'Failed to submit rating');
+    },
+    onSuccess: () => {
+      // ✅ Invalidate queries to refetch fresh data
+      queryClient.invalidateQueries({ queryKey: ['cafe-ratings', cafe.id] });
+      queryClient.invalidateQueries({ queryKey: ['user-rating', cafe.id, user?.id] });
+
+      setSuccessMessage(userRating ? 'Rating updated!' : 'Rating submitted!');
+      setIsEditing(false);
+      setError(null);
+
+      // Notify parent
+      onRatingSubmitted();
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(null), 3000);
+    },
+  });
+
+  // Calculate overall rating from form data
+  const calculateOverallRating = (data: typeof formData) => {
+    const ratings = [
+      data.coffee_rating,
+      data.vibe_rating,
+      data.wifi_rating,
+      data.outlets_rating,
+      data.seating_rating,
+      data.noise_rating,
+    ].filter((r) => r !== null) as number[];
+
+    if (ratings.length === 0) return 0;
+    return ratings.reduce((sum, r) => sum + r, 0) / ratings.length;
+  };
+
+  // Submit handler
+  const handleSubmit = () => {
     if (!user) {
       setError('Please sign in to submit a rating');
       return;
@@ -160,62 +255,8 @@ export default function RatingPanel({
       return;
     }
 
-    setIsSubmitting(true);
     setError(null);
-
-    try {
-      const payload = {
-        cafe_id: cafe.id,
-        ...formData,
-      };
-
-      let response;
-      if (userRating) {
-        // Update existing rating
-        response = await fetch(`/api/ratings/${userRating.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-      } else {
-        // Create new rating
-        response = await fetch('/api/ratings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-      }
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to submit rating');
-      }
-
-      // Success!
-      setSuccessMessage(userRating ? 'Rating updated!' : 'Rating submitted!');
-      setUserRating(data.rating);
-      setIsEditing(false);
-
-      // Refresh data
-      onRatingSubmitted();
-
-      // Reload ratings list
-      const ratingsResponse = await fetch(`/api/cafes/${cafe.id}/ratings`);
-      const ratingsData = await ratingsResponse.json();
-      if (ratingsData.ratings) {
-        setAllRatings(ratingsData.ratings);
-      }
-
-      // Clear success message after 3 seconds
-      setTimeout(() => setSuccessMessage(null), 3000);
-
-    } catch (err) {
-      console.error('Error submitting rating:', err);
-      setError(err instanceof Error ? err.message : 'Failed to submit rating');
-    } finally {
-      setIsSubmitting(false);
-    }
+    submitMutation.mutate({ cafe_id: cafe.id, ...formData });
   };
 
   // Handle edit mode
@@ -534,10 +575,10 @@ export default function RatingPanel({
                     <div className="flex gap-2 mt-4">
                       <button
                         onClick={handleSubmit}
-                        disabled={!user || isSubmitting}
+                        disabled={!user || submitMutation.isPending}
                         className="flex-1 bg-c2c-orange hover:bg-c2c-orange-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-all text-sm font-medium"
                       >
-                        {isSubmitting
+                        {submitMutation.isPending
                           ? 'Submitting...'
                           : userRating
                           ? 'Update Rating'
@@ -569,7 +610,7 @@ export default function RatingPanel({
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {allRatings.map((rating) => (
+                    {allRatings.map((rating: RatingWithUser) => (
                       <div
                         key={rating.id}
                         className="bg-white border border-c2c-orange/40 rounded p-3"
