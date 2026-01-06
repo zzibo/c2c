@@ -123,11 +123,8 @@ export function CafeMarker({ cafe, isSelected, zoom, onClick }: CafeMarkerProps)
           <div className="bg-c2c-orange border-2 border-c2c-orange-dark px-3 py-2 shadow-lg whitespace-nowrap rounded-lg">
             <p className="text-xs font-bold text-white font-sans">{cafe.name}</p>
             <p className="text-xs text-white/90 font-sans">
-              {cafe.distance ? `${(cafe.distance / 1609.34).toFixed(2)} mi` : 'Distance unknown'}
+              {cafe.ratings.overall > 0 ? `${cafe.ratings.overall.toFixed(1)} ★` : 'No ratings yet'}
             </p>
-            {cafe.ratings.overall > 0 && (
-              <p className="text-xs text-white/90 font-sans">★ {cafe.ratings.overall.toFixed(1)}</p>
-            )}
           </div>
         </div>,
         document.body
