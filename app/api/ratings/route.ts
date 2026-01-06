@@ -41,22 +41,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Look up cafe by geoapify_place_id (frontend sends this as cafe.id)
-    // The database expects a UUID, so we need to find the cafe first
-    const { data: cafeData, error: cafeError } = await supabaseAdmin
-      .from('cafes')
-      .select('id')
-      .eq('geoapify_place_id', cafe_id)
-      .single();
+    // ✅ PERFORMANCE FIX: Assume cafe_id is UUID (no lookup needed!)
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cafe_id);
 
-    if (cafeError || !cafeData) {
+    if (!isUUID) {
       return NextResponse.json(
-        { error: `Cafe not found: ${cafe_id}` },
-        { status: 404 }
+        { error: 'Invalid cafe ID format. Expected UUID.' },
+        { status: 400 }
       );
     }
 
-    const cafe_uuid = cafeData.id;
+    const cafe_uuid = cafe_id;  // ✅ Use directly!
 
     // At least one rating must be provided
     const hasAtLeastOneRating = [

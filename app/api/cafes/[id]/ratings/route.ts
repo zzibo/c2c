@@ -19,33 +19,22 @@ export async function GET(
       );
     }
 
-    // Check if identifier is a UUID or geoapify_place_id
+    // ✅ PERFORMANCE FIX: Assume ID is UUID (frontend now sends UUIDs)
+    // Check if identifier is a UUID
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cafeIdentifier);
-    
-    let cafe_id: string;
-    
-    if (isUUID) {
-      // It's already a UUID, use it directly
-      cafe_id = cafeIdentifier;
-    } else {
-      // It's a geoapify_place_id, look up the cafe UUID
-      const { data: cafe, error: cafeError } = await supabaseAdmin
-        .from('cafes')
-        .select('id')
-        .eq('geoapify_place_id', cafeIdentifier)
-        .single();
 
-      if (cafeError || !cafe) {
-        return NextResponse.json(
-          { error: 'Cafe not found' },
-          { status: 404 }
-        );
-      }
-      
-      cafe_id = cafe.id;
+    if (!isUUID) {
+      // Legacy support: ID is not a UUID, must be geoapify_place_id
+      return NextResponse.json(
+        { error: 'Invalid cafe ID format. Expected UUID.' },
+        { status: 400 }
+      );
     }
 
-    // Fetch all ratings for this cafe
+    const cafe_id = cafeIdentifier;  // ✅ Use directly, no database lookup!
+
+    // ✅ PERFORMANCE FIX: Fetch ratings first, then usernames separately
+    // Note: Supabase JOIN requires foreign key constraint, falling back to 2 queries for now
     const { data: ratings, error } = await supabaseAdmin
       .from('ratings')
       .select('*')
