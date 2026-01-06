@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import Map, { Marker, NavigationControl, GeolocateControl } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
+import { useQuery } from '@tanstack/react-query';
 import type { Coordinate, Cafe } from '@/types/cafe';
 import RatingPanel from '@/components/cafe/RatingPanel';
 import { CafeSidebar } from '@/components/map/CafeSidebar';
@@ -44,10 +45,64 @@ export default function MapView({
   const [isPanelCollapsed, setIsPanelCollapsedInternal] = useState(persistedState?.isPanelCollapsed ?? false);
   const [selectedCafeForRating, setSelectedCafeForRating] = useState<Cafe | null>(null);
   const [showRatingPanel, setShowRatingPanel] = useState(false);
-  
+
+  // Track map viewport bounds for viewport-based loading
+  const [mapBounds, setMapBounds] = useState<{
+    north: number;
+    south: number;
+    east: number;
+    west: number;
+  } | null>(null);
+
+  // Track if we're in "search results mode" (showing filtered results vs viewport results)
+  const [isShowingSearchResults, setIsShowingSearchResults] = useState(false);
+
   // Use SearchContext for shared search state
   const { searchQuery: searchQueryContext, setSearchQuery, isSearching, setIsSearching, registerSearchHandler } = useSearch();
-  
+
+  // Viewport-based cafe loading using React Query
+  const {
+    data: viewportData,
+    isLoading: isLoadingViewport,
+    error: viewportError,
+  } = useQuery({
+    queryKey: ['cafes-viewport', mapBounds],
+    queryFn: async () => {
+      if (!mapBounds) return { cafes: [] };
+
+      const response = await fetch(
+        `/api/cafes/viewport?` +
+        `north=${mapBounds.north}&south=${mapBounds.south}&` +
+        `east=${mapBounds.east}&west=${mapBounds.west}`
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to fetch cafes');
+      }
+
+      return response.json();
+    },
+    enabled: !!mapBounds && !isShowingSearchResults,  // Don't fetch if showing search results
+    staleTime: 60000,  // Cache for 1 minute
+    gcTime: 300000,    // Keep in cache for 5 minutes
+  });
+
+  // Update cafes when viewport data changes (only if not showing search results)
+  useEffect(() => {
+    if (viewportData?.cafes && !isShowingSearchResults) {
+      setCafes(viewportData.cafes);
+    }
+  }, [viewportData, isShowingSearchResults]);
+
+  // Handle viewport errors
+  useEffect(() => {
+    if (viewportError) {
+      console.error('Viewport fetch error:', viewportError);
+      setSearchError(viewportError instanceof Error ? viewportError.message : 'Failed to load cafes');
+    }
+  }, [viewportError]);
+
   // Restore search query from localStorage (only once on mount)
   useEffect(() => {
     if (persistedState?.searchQuery) {
@@ -191,6 +246,72 @@ export default function MapView({
     }
   }, [userLocation, cafes]);
 
+  // Debounced function to update map bounds (avoid API spam during pan/zoom)
+  const updateMapBounds = useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+
+    const bounds = map.getBounds();
+    const newBounds = {
+      north: bounds.getNorth(),
+      south: bounds.getSouth(),
+      east: bounds.getEast(),
+      west: bounds.getWest(),
+    };
+
+    // Exit search results mode when user manually pans the map
+    // This allows viewport-based loading to take over
+    setIsShowingSearchResults(false);
+    setMapBounds(newBounds);
+  }, []);
+
+  // Debounced version with 300ms delay
+  const debouncedUpdateMapBounds = useMemo(
+    () => {
+      let timeoutId: NodeJS.Timeout | null = null;
+      return () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          updateMapBounds();
+        }, 300);
+      };
+    },
+    [updateMapBounds]
+  );
+
+  // Listen to map movement events and update bounds
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+
+    // Set initial bounds when map loads
+    const handleMapLoad = () => {
+      updateMapBounds();
+    };
+
+    // Update bounds when user pans or zooms
+    const handleMapMove = () => {
+      debouncedUpdateMapBounds();
+    };
+
+    // If map is already loaded, set bounds immediately
+    if (map.loaded()) {
+      updateMapBounds();
+    } else {
+      map.once('load', handleMapLoad);
+    }
+
+    // Listen for map movement
+    map.on('moveend', handleMapMove);
+    map.on('zoomend', handleMapMove);
+
+    return () => {
+      map.off('load', handleMapLoad);
+      map.off('moveend', handleMapMove);
+      map.off('zoomend', handleMapMove);
+    };
+  }, [updateMapBounds, debouncedUpdateMapBounds]);
+
   // Resize map when panel collapses/expands
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -214,55 +335,64 @@ export default function MapView({
     return () => clearTimeout(timer);
   }, [isPanelCollapsed]);
 
-  // Function to search for cafes around user location
-  const searchAroundMe = async () => {
-    // Prevent multiple simultaneous searches
-    if (isSearching) {
-      return;
-    }
+  // Helper function: Calculate distance between two points (Haversine formula)
+  const calculateDistance = useCallback((lat1: number, lng1: number, lat2: number, lng2: number): number => {
+    const R = 6371e3; // Earth radius in meters
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+    const Δλ = ((lng2 - lng1) * Math.PI) / 180;
 
+    const a =
+      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // Distance in meters
+  }, []);
+
+  // Calculate distances and sort cafes by distance from user
+  const cafesWithDistance = useMemo(() => {
+    if (!userLocation) return cafes;
+
+    return cafes
+      .map((cafe) => ({
+        ...cafe,
+        distance: calculateDistance(
+          userLocation.lat,
+          userLocation.lng,
+          cafe.location.lat,
+          cafe.location.lng
+        ),
+      }))
+      .sort((a, b) => (a.distance || 0) - (b.distance || 0));
+  }, [cafes, userLocation, calculateDistance]);
+
+  // Function to search for cafes around user location
+  const searchAroundMe = useCallback(() => {
     if (!userLocation) {
       setSearchError('Location not available. Please enable location access.');
       return;
     }
 
-    setIsSearching(true);
+    // Clear any previous errors and exit search results mode
     setSearchError(null);
+    setIsShowingSearchResults(false);  // Switch back to viewport mode
 
-    try {
-      const response = await fetch(
-        `/api/cafes/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}`
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch cafes');
-      }
-
-      const sortedCafes = (data.cafes || []).sort((a: Cafe, b: Cafe) => {
-        const distA = a.distance || Infinity;
-        const distB = b.distance || Infinity;
-        return distA - distB;
+    // Center map on user location - viewport system will load cafes automatically
+    const map = mapRef.current?.getMap();
+    if (map) {
+      map.flyTo({
+        center: [userLocation.lng, userLocation.lat],
+        zoom: 14,
+        duration: 1000,
       });
-      setCafes(sortedCafes);
-      setSelectedCafeId(null);
-      console.log(`Found ${data.count} cafes within 2 miles`);
-    } catch (error) {
-      console.error('Error searching for cafes:', error);
-      setSearchError(error instanceof Error ? error.message : 'Failed to search cafes');
-    } finally {
-      setIsSearching(false);
+      console.log('Centering map on user location - viewport will load cafes');
     }
-  };
+  }, [userLocation]);
 
   // Function to search cafes by name
   const searchCafesByName = useCallback(async (query: string) => {
-    // Prevent multiple simultaneous searches
-    if (isSearching) {
-      return;
-    }
-
     if (!query.trim()) {
       setSearchError('Please enter a cafe name to search');
       return;
@@ -277,6 +407,7 @@ export default function MapView({
     setSearchError(null);
 
     try {
+      // Search for cafes by name
       const response = await fetch(
         `/api/cafes/search?q=${encodeURIComponent(query)}&lat=${userLocation.lat}&lng=${userLocation.lng}`
       );
@@ -287,21 +418,47 @@ export default function MapView({
         throw new Error(data.error || 'Failed to search cafes');
       }
 
-      const sortedCafes = (data.cafes || []).sort((a: Cafe, b: Cafe) => {
+      const searchResults = data.cafes || [];
+
+      if (searchResults.length === 0) {
+        setSearchError(`No cafes found matching "${query}"`);
+        setIsSearching(false);
+        return;
+      }
+
+      // Sort by distance from user
+      const sortedResults = searchResults.sort((a: Cafe, b: Cafe) => {
         const distA = a.distance || Infinity;
         const distB = b.distance || Infinity;
         return distA - distB;
       });
-      setCafes(sortedCafes);
+
+      // Enter search results mode - prevents viewport from overwriting results
+      setIsShowingSearchResults(true);
+
+      // Show search results in the sidebar
+      setCafes(sortedResults);
       setSelectedCafeId(null);
-      console.log(`Found ${data.count} cafes matching "${query}"`);
+
+      // Center map on the first result
+      const firstCafe = sortedResults[0];
+      const map = mapRef.current?.getMap();
+      if (map && firstCafe) {
+        map.flyTo({
+          center: [firstCafe.location.lng, firstCafe.location.lat],
+          zoom: 15,
+          duration: 1000,
+        });
+      }
+
+      console.log(`Found ${sortedResults.length} cafes matching "${query}"`);
     } catch (error) {
       console.error('Error searching cafes:', error);
       setSearchError(error instanceof Error ? error.message : 'Failed to search cafes');
     } finally {
       setIsSearching(false);
     }
-  }, [isSearching, userLocation, setIsSearching]);
+  }, [userLocation, setIsSearching]);
 
   // Register search handler with SearchContext so AppHeader can trigger searches
   useEffect(() => {
@@ -482,12 +639,25 @@ export default function MapView({
         </Map>
       </div>
 
+      {/* Loading indicator for viewport changes */}
+      {isLoadingViewport && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40
+                        bg-c2c-base/95 border-2 border-c2c-orange
+                        px-4 py-2 rounded-full shadow-lg">
+          <div className="flex items-center gap-2 text-c2c-orange">
+            <div className="animate-spin h-4 w-4 border-2 border-c2c-orange
+                            border-t-transparent rounded-full"></div>
+            <span className="text-sm font-medium">Loading cafes...</span>
+          </div>
+        </div>
+      )}
+
       {/* Left Panel overlay */}
       <CafeSidebar
         isCollapsed={isPanelCollapsed}
         onToggle={handlePanelToggle}
-        cafes={cafes}
-        isSearching={isSearching}
+        cafes={cafesWithDistance}
+        isSearching={isSearching || isLoadingViewport}
         searchError={searchError}
         searchQuery={searchQueryContext}
         onSearchQueryChange={setSearchQuery}
