@@ -306,7 +306,7 @@ export default function RatingPanel({
     <>
       {/* Panel */}
       <div
-        className="fixed right-0 top-0 h-full w-[400px] bg-c2c-base border-l-2 border-c2c-orange shadow-xl z-[210] overflow-y-auto"
+        className="fixed right-0 top-0 h-full w-[400px] bg-c2c-base border-l-2 border-c2c-orange shadow-xl z-[100] overflow-y-auto"
         style={{ animation: 'slideInRight 300ms ease-out' }}
       >
         {/* Header */}

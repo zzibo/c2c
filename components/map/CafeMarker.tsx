@@ -61,7 +61,7 @@ export function CafeMarker({ cafe, isSelected, zoom, onClick }: CafeMarkerProps)
         longitude={cafe.location.lng}
         latitude={cafe.location.lat}
         anchor="bottom"
-        style={{ zIndex: isSelected ? 1000 : 1 }}
+        style={{ zIndex: isSelected ? 20 : 10 }}
       >
         <div 
           ref={markerRef}
@@ -122,9 +122,21 @@ export function CafeMarker({ cafe, isSelected, zoom, onClick }: CafeMarkerProps)
         >
           <div className="bg-c2c-orange border-2 border-c2c-orange-dark px-3 py-2 shadow-lg whitespace-nowrap rounded-lg">
             <p className="text-xs font-bold text-white font-sans">{cafe.name}</p>
-            <p className="text-xs text-white/90 font-sans">
-              {cafe.ratings.overall > 0 ? `${cafe.ratings.overall.toFixed(1)} ★` : 'No ratings yet'}
-            </p>
+            {cafe.ratings.overall > 0 ? (
+              <div className="flex items-center gap-1 mt-1">
+                <Image
+                  src="/assets/full_star.webp"
+                  alt="Star"
+                  width={12}
+                  height={12}
+                  className="object-contain pixel-image"
+                  unoptimized
+                />
+                <span className="text-xs text-white/90 font-sans">{cafe.ratings.overall.toFixed(1)}</span>
+              </div>
+            ) : (
+              <p className="text-xs text-white/90 font-sans">No ratings yet</p>
+            )}
           </div>
         </div>,
         document.body

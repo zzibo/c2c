@@ -8,7 +8,7 @@ import type { Coordinate, Cafe } from '@/types/cafe';
 import RatingPanel from '@/components/cafe/RatingPanel';
 import { CafeSidebar } from '@/components/map/CafeSidebar';
 import { CafeMarker } from '@/components/map/CafeMarker';
-import { useSearch } from '@/lib/search/SearchContext';
+import { useAppStore } from '@/lib/store/AppStore';
 import { loadMapState, saveMapState } from '@/lib/storage/mapStorage';
 import { useServiceWorker } from '@/hooks/useServiceWorker';
 
@@ -42,7 +42,6 @@ export default function MapView({
   const [cafes, setCafesInternal] = useState<Cafe[]>(persistedState?.cafes ?? []);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [selectedCafeId, setSelectedCafeId] = useState<string | null>(null);
-  const [isPanelCollapsed, setIsPanelCollapsedInternal] = useState(persistedState?.isPanelCollapsed ?? false);
   const [selectedCafeForRating, setSelectedCafeForRating] = useState<Cafe | null>(null);
   const [showRatingPanel, setShowRatingPanel] = useState(false);
 
@@ -54,13 +53,46 @@ export default function MapView({
     west: number;
   } | null>(null);
 
-  // Track if we're in "search results mode" (showing filtered results vs viewport results)
-  const [isShowingSearchResults, setIsShowingSearchResults] = useState(false);
+  // Use AppStore for global state management (replaces SearchContext + SidebarContext)
+  const { state, setSearchQuery, setActiveSearchQuery, setPanelCollapsed, registerSearchHandler } = useAppStore();
+  const { searchQuery: searchQueryContext, activeSearchQuery, isPanelCollapsed } = state;
 
-  // Use SearchContext for shared search state
-  const { searchQuery: searchQueryContext, setSearchQuery, isSearching, setIsSearching, registerSearchHandler } = useSearch();
+  // Search Query - fetches cafes by name
+  const {
+    data: searchData,
+    isLoading: isSearchingQuery,
+    error: searchQueryError,
+  } = useQuery({
+    queryKey: ['cafes-search', activeSearchQuery, userLocation],
+    queryFn: async () => {
+      if (!activeSearchQuery || !userLocation) return { cafes: [] };
 
-  // Viewport-based cafe loading using React Query
+      const response = await fetch(
+        `/api/cafes/search?q=${encodeURIComponent(activeSearchQuery)}&lat=${userLocation.lat}&lng=${userLocation.lng}`
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to search cafes');
+      }
+
+      const data = await response.json();
+
+      // Sort by distance from user
+      const sortedResults = (data.cafes || []).sort((a: Cafe, b: Cafe) => {
+        const distA = a.distance || Infinity;
+        const distB = b.distance || Infinity;
+        return distA - distB;
+      });
+
+      return { cafes: sortedResults, count: sortedResults.length };
+    },
+    enabled: !!activeSearchQuery && !!userLocation,  // Only fetch when there's an active search
+    staleTime: 60000,  // Cache for 1 minute
+    gcTime: 300000,    // Keep in cache for 5 minutes
+  });
+
+  // Viewport Query - fetches cafes in map bounds
   const {
     data: viewportData,
     isLoading: isLoadingViewport,
@@ -83,17 +115,37 @@ export default function MapView({
 
       return response.json();
     },
-    enabled: !!mapBounds && !isShowingSearchResults,  // Don't fetch if showing search results
+    enabled: !!mapBounds && !activeSearchQuery,  // Only fetch when NOT searching
     staleTime: 60000,  // Cache for 1 minute
     gcTime: 300000,    // Keep in cache for 5 minutes
   });
 
-  // Update cafes when viewport data changes (only if not showing search results)
-  useEffect(() => {
-    if (viewportData?.cafes && !isShowingSearchResults) {
-      setCafes(viewportData.cafes);
+  // Determine which cafes to display based on active query
+  const displayedCafes = useMemo(() => {
+    if (activeSearchQuery && searchData?.cafes) {
+      return searchData.cafes;
     }
-  }, [viewportData, isShowingSearchResults]);
+    if (viewportData?.cafes) {
+      return viewportData.cafes;
+    }
+    return [];
+  }, [activeSearchQuery, searchData, viewportData]);
+
+  // Update cafes when displayed data changes
+  useEffect(() => {
+    setCafes(displayedCafes);
+  }, [displayedCafes]);
+
+  // Sync search error state
+  useEffect(() => {
+    if (searchQueryError) {
+      setSearchError(searchQueryError instanceof Error ? searchQueryError.message : 'Failed to search cafes');
+    } else if (activeSearchQuery && searchData?.cafes.length === 0) {
+      setSearchError(`No cafes found matching "${activeSearchQuery}"`);
+    } else {
+      setSearchError(null);
+    }
+  }, [searchQueryError, searchData, activeSearchQuery]);
 
   // Handle viewport errors
   useEffect(() => {
@@ -178,11 +230,6 @@ export default function MapView({
     debouncedSaveState();
   };
 
-  const setIsPanelCollapsed = (value: boolean | ((prev: boolean) => boolean)) => {
-    setIsPanelCollapsedInternal(value);
-    debouncedSaveState();
-  };
-
   // Save when searchQuery changes (from context) - debounced
   useEffect(() => {
     debouncedSaveState();
@@ -259,11 +306,11 @@ export default function MapView({
       west: bounds.getWest(),
     };
 
-    // Exit search results mode when user manually pans the map
-    // This allows viewport-based loading to take over
-    setIsShowingSearchResults(false);
+    // Clear active search when user manually pans the map
+    // This switches to viewport-based loading
+    setActiveSearchQuery(null);
     setMapBounds(newBounds);
-  }, []);
+  }, [setActiveSearchQuery]);
 
   // Debounced version with 300ms delay
   const debouncedUpdateMapBounds = useMemo(
@@ -375,11 +422,12 @@ export default function MapView({
       return;
     }
 
-    // Clear any previous errors and exit search results mode
+    // Clear search query text, errors, and active search
+    setSearchQuery('');
     setSearchError(null);
-    setIsShowingSearchResults(false);  // Switch back to viewport mode
+    setActiveSearchQuery(null);  // Switch back to viewport mode
 
-    // Center map on user location - viewport system will load cafes automatically
+    // Center map on user location
     const map = mapRef.current?.getMap();
     if (map) {
       map.flyTo({
@@ -387,12 +435,19 @@ export default function MapView({
         zoom: 14,
         duration: 1000,
       });
+
+      // Update bounds after the flyTo animation completes
+      // This ensures viewport query fetches cafes in the new location
+      setTimeout(() => {
+        updateMapBounds();
+      }, 1100); // Slightly longer than flyTo duration (1000ms)
+
       console.log('Centering map on user location - viewport will load cafes');
     }
-  }, [userLocation]);
+  }, [userLocation, setSearchQuery, setActiveSearchQuery, updateMapBounds]);
 
-  // Function to search cafes by name
-  const searchCafesByName = useCallback(async (query: string) => {
+  // Function to search cafes by name - now uses TanStack Query
+  const searchCafesByName = useCallback((query: string) => {
     if (!query.trim()) {
       setSearchError('Please enter a cafe name to search');
       return;
@@ -403,45 +458,22 @@ export default function MapView({
       return;
     }
 
-    setIsSearching(true);
-    setSearchError(null);
+    // Trigger search query by setting activeSearchQuery
+    setActiveSearchQuery(query);
+    setSelectedCafeId(null);
 
-    try {
-      // Search for cafes by name
-      const response = await fetch(
-        `/api/cafes/search?q=${encodeURIComponent(query)}&lat=${userLocation.lat}&lng=${userLocation.lng}`
-      );
+    console.log(`Searching for cafes matching "${query}"`);
+  }, [userLocation]);
 
-      const data = await response.json();
+  // Register search handler with SearchContext so AppHeader can trigger searches
+  useEffect(() => {
+    registerSearchHandler(searchCafesByName);
+  }, [registerSearchHandler, searchCafesByName]);
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to search cafes');
-      }
-
-      const searchResults = data.cafes || [];
-
-      if (searchResults.length === 0) {
-        setSearchError(`No cafes found matching "${query}"`);
-        setIsSearching(false);
-        return;
-      }
-
-      // Sort by distance from user
-      const sortedResults = searchResults.sort((a: Cafe, b: Cafe) => {
-        const distA = a.distance || Infinity;
-        const distB = b.distance || Infinity;
-        return distA - distB;
-      });
-
-      // Enter search results mode - prevents viewport from overwriting results
-      setIsShowingSearchResults(true);
-
-      // Show search results in the sidebar
-      setCafes(sortedResults);
-      setSelectedCafeId(null);
-
-      // Center map on the first result
-      const firstCafe = sortedResults[0];
+  // Center map on first search result when search completes
+  useEffect(() => {
+    if (searchData?.cafes && searchData.cafes.length > 0 && activeSearchQuery) {
+      const firstCafe = searchData.cafes[0];
       const map = mapRef.current?.getMap();
       if (map && firstCafe) {
         map.flyTo({
@@ -450,27 +482,15 @@ export default function MapView({
           duration: 1000,
         });
       }
-
-      console.log(`Found ${sortedResults.length} cafes matching "${query}"`);
-    } catch (error) {
-      console.error('Error searching cafes:', error);
-      setSearchError(error instanceof Error ? error.message : 'Failed to search cafes');
-    } finally {
-      setIsSearching(false);
     }
-  }, [userLocation, setIsSearching]);
-
-  // Register search handler with SearchContext so AppHeader can trigger searches
-  useEffect(() => {
-    registerSearchHandler(searchCafesByName);
-  }, [registerSearchHandler, searchCafesByName]);
+  }, [searchData, activeSearchQuery]);
 
   // Handle search form submission
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
     // Prevent if already searching
-    if (isSearching) {
+    if (isSearchingQuery) {
       return;
     }
     if (searchQueryContext.trim()) {
@@ -483,13 +503,25 @@ export default function MapView({
     e.preventDefault();
     e.stopPropagation();
     // Prevent if already searching
-    if (isSearching) {
+    if (isSearchingQuery) {
       return;
     }
     if (searchQueryContext.trim()) {
       searchCafesByName(searchQueryContext);
     }
   };
+
+  // Handle clear search - return to viewport mode
+  const handleClearSearch = useCallback(() => {
+    // Clear search query text
+    setSearchQuery('');
+    // Clear any search errors
+    setSearchError(null);
+    // Clear active search (triggers viewport mode)
+    setActiveSearchQuery(null);
+    // Force update map bounds to reload viewport cafes
+    updateMapBounds();
+  }, [setSearchQuery, setActiveSearchQuery, updateMapBounds]);
 
   // Handle cafe panel item click - open rating panel
   const handleCafeClick = (cafe: Cafe) => {
@@ -540,7 +572,7 @@ export default function MapView({
 
   // Handle panel collapse/expand
   const handlePanelToggle = (collapsed: boolean) => {
-    setIsPanelCollapsed(collapsed);
+    setPanelCollapsed(collapsed);
     // Map resize is handled by useEffect hook
   };
 
@@ -657,16 +689,18 @@ export default function MapView({
         isCollapsed={isPanelCollapsed}
         onToggle={handlePanelToggle}
         cafes={cafesWithDistance}
-        isSearching={isSearching || isLoadingViewport}
+        isSearching={isSearchingQuery || isLoadingViewport}
         searchError={searchError}
         searchQuery={searchQueryContext}
         onSearchQueryChange={setSearchQuery}
         onSearchSubmit={handleSearchSubmit}
         onSearchClick={handleSearchClick}
+        onClearSearch={handleClearSearch}
+        isShowingSearchResults={!!activeSearchQuery}
         onSearchAround={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          if (isSearching || !userLocation) return;
+          if (isSearchingQuery || !userLocation) return;
           searchAroundMe();
         }}
         userLocation={userLocation}
