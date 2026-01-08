@@ -15,6 +15,8 @@ type CafeSidebarProps = {
     onSearchQueryChange: (value: string) => void;
     onSearchSubmit: (e: React.FormEvent) => void;
     onSearchClick: (e: React.MouseEvent) => void;
+    onClearSearch: () => void;
+    isShowingSearchResults: boolean;
     onSearchAround: (e: React.MouseEvent) => void;
     userLocation: Coordinate | null;
     selectedCafeId: string | null;
@@ -34,6 +36,8 @@ export function CafeSidebar({
     onSearchQueryChange,
     onSearchSubmit,
     onSearchClick,
+    onClearSearch,
+    isShowingSearchResults,
     onSearchAround,
     userLocation,
     selectedCafeId,
@@ -43,7 +47,7 @@ export function CafeSidebar({
     formatDistance,
 }: CafeSidebarProps) {
     return (
-        <div className="absolute left-4 md:left-6 top-24 md:top-28 z-30 flex items-start gap-2">
+        <div className="absolute left-4 md:left-6 top-24 md:top-28 z-50 flex items-start gap-2">
             {/* Sidebar Panel */}
             <AnimatePresence>
                 {!isCollapsed && (
@@ -85,7 +89,16 @@ export function CafeSidebar({
 
                         <form onSubmit={onSearchSubmit} className="mb-3">
                             <div className="flex items-center gap-2">
-                                <div className="flex-1 relative">
+                                <div className="flex flex-row items-center border border-c2c-orange rounded-lg px-2">
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        className="h-4 w-4 text-c2c-orange pointer-events-none"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    </svg>
                                     <input
                                         type="text"
                                         value={searchQuery}
@@ -97,18 +110,37 @@ export function CafeSidebar({
                                             }
                                         }}
                                         placeholder="Search cafes..."
-                                        className="w-full px-3 py-2 pl-9 bg-c2c-base border border-c2c-orange rounded focus:outline-none focus:ring-2 focus:ring-c2c-orange focus:border-transparent text-sm placeholder-c2c-orange text-c2c-orange"
+                                        className="w-full px-3 py-2 bg-c2c-base focus:outline-none focus:border-none focus:ring-0 text-sm placeholder-c2c-orange text-c2c-orange"
                                         disabled={!userLocation || isSearching}
                                     />
-                                    <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-c2c-orange pointer-events-none"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                    </svg>
+                                   
+                                 
+                                    {/* Clear button - only show when there's a search query or showing search results */}
+                                    <AnimatePresence>
+                                        {(searchQuery || isShowingSearchResults) && (
+                                            <motion.button
+                                                type="button"
+                                                onClick={onClearSearch}
+                                                initial={{ opacity: 0, scale: 0.8 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                exit={{ opacity: 0, scale: 0.8 }}
+                                                className=" text-c2c-orange hover:text-c2c-orange-dark transition-colors"
+                                                whileHover={{ scale: 1.1 }}
+                                                whileTap={{ scale: 0.9 }}
+                                            >
+                                                <svg
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    className="h-4 w-4"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </motion.button>
+                                        )}
+                                    </AnimatePresence>
+                    
                                 </div>
                                 <motion.button
                                     type="submit"

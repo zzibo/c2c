@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth/AuthContext";
-import { SearchProvider } from "@/lib/search/SearchContext";
 import { ToastProvider } from "@/lib/toast/ToastContext";
 import { QueryProvider } from "@/lib/query/QueryProvider";
+import { AppStoreProvider } from "@/lib/store/AppStore";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { WelcomeBackHandler } from "@/components/auth/WelcomeBackHandler";
 
@@ -56,13 +56,13 @@ export default function RootLayout({
       <body className={robotoMono.className}>
         <QueryProvider>
           <AuthProvider>
-            <SearchProvider>
+            <AppStoreProvider>
               <ToastProvider>
                 <WelcomeBackHandler />
                 <AppHeader />
                 {children}
               </ToastProvider>
-            </SearchProvider>
+            </AppStoreProvider>
           </AuthProvider>
         </QueryProvider>
       </body>
