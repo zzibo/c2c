@@ -102,6 +102,11 @@ export default function MapView({
     queryFn: async () => {
       if (!mapBounds) return { cafes: [] };
 
+      console.log('🗺️ VIEWPORT QUERY TRIGGERED:', {
+        bounds: mapBounds,
+        activeSearchQuery
+      });
+
       const response = await fetch(
         `/api/cafes/viewport?` +
         `north=${mapBounds.north}&south=${mapBounds.south}&` +
@@ -110,10 +115,13 @@ export default function MapView({
 
       if (!response.ok) {
         const data = await response.json();
+        console.error('❌ Viewport API error:', data);
         throw new Error(data.error || 'Failed to fetch cafes');
       }
 
-      return response.json();
+      const result = await response.json();
+      console.log('✅ Viewport API response:', result);
+      return result;
     },
     enabled: !!mapBounds && !activeSearchQuery,  // Only fetch when NOT searching
     staleTime: 60000,  // Cache for 1 minute
@@ -296,7 +304,11 @@ export default function MapView({
   // Debounced function to update map bounds (avoid API spam during pan/zoom)
   const updateMapBounds = useCallback(() => {
     const map = mapRef.current?.getMap();
-    if (!map) return;
+    if (!map) {
+      console.log('⚠️ updateMapBounds: map not ready');
+      return;
+      
+    }
 
     const bounds = map.getBounds();
     const newBounds = {
@@ -305,6 +317,8 @@ export default function MapView({
       east: bounds.getEast(),
       west: bounds.getWest(),
     };
+
+    console.log('📍 Updating map bounds:', newBounds);
 
     // Clear active search when user manually pans the map
     // This switches to viewport-based loading
@@ -328,34 +342,63 @@ export default function MapView({
 
   // Listen to map movement events and update bounds
   useEffect(() => {
-    const map = mapRef.current?.getMap();
-    if (!map) return;
+    // Poll for map to be ready (in case it's not ready on first render)
+    let pollCount = 0;
+    const maxPolls = 20; // Try for up to 2 seconds (20 * 100ms)
 
-    // Set initial bounds when map loads
-    const handleMapLoad = () => {
-      updateMapBounds();
+    const setupMapListeners = () => {
+      const map = mapRef.current?.getMap();
+      if (!map) {
+        pollCount++;
+        if (pollCount < maxPolls) {
+          console.log(`⏳ Map not ready yet (attempt ${pollCount}/${maxPolls}), retrying...`);
+          setTimeout(setupMapListeners, 100);
+        } else {
+          console.error('❌ Map failed to initialize after 2 seconds');
+        }
+        return;
+      }
+
+      console.log('✅ Map ref ready, setting up bounds listeners');
+
+      // Set initial bounds when map loads
+      const handleMapLoad = () => {
+        console.log('🗺️ Map loaded event - setting initial bounds');
+        updateMapBounds();
+      };
+
+      // Update bounds when user pans or zooms
+      const handleMapMove = () => {
+        console.log('🔄 Map moved - debouncing bounds update');
+        debouncedUpdateMapBounds();
+      };
+
+      // If map is already loaded, set bounds immediately
+      if (map.loaded()) {
+        console.log('🗺️ Map already loaded - setting bounds immediately');
+        updateMapBounds();
+      } else {
+        console.log('⏳ Waiting for map load event...');
+        map.once('load', handleMapLoad);
+      }
+
+      // Listen for map movement
+      map.on('moveend', handleMapMove);
+      map.on('zoomend', handleMapMove);
+
+      // Cleanup function
+      return () => {
+        map.off('load', handleMapLoad);
+        map.off('moveend', handleMapMove);
+        map.off('zoomend', handleMapMove);
+      };
     };
 
-    // Update bounds when user pans or zooms
-    const handleMapMove = () => {
-      debouncedUpdateMapBounds();
-    };
+    const cleanup = setupMapListeners();
 
-    // If map is already loaded, set bounds immediately
-    if (map.loaded()) {
-      updateMapBounds();
-    } else {
-      map.once('load', handleMapLoad);
-    }
-
-    // Listen for map movement
-    map.on('moveend', handleMapMove);
-    map.on('zoomend', handleMapMove);
-
+    // Return cleanup function if it exists
     return () => {
-      map.off('load', handleMapLoad);
-      map.off('moveend', handleMapMove);
-      map.off('zoomend', handleMapMove);
+      if (cleanup) cleanup();
     };
   }, [updateMapBounds, debouncedUpdateMapBounds]);
 
