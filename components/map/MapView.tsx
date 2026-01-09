@@ -430,19 +430,20 @@ export default function MapView({
     // Center map on user location
     const map = mapRef.current?.getMap();
     if (map) {
+
+      // Listen for moveend event to update bounds after animation
+      const handleMoveEnd = () => {
+        updateMapBounds();
+        map.off('moveend', handleMoveEnd); // Remove listener after firing once
+      };
+
+      map.once('moveend', handleMoveEnd);
+
       map.flyTo({
         center: [userLocation.lng, userLocation.lat],
         zoom: 14,
         duration: 1000,
       });
-
-      // Update bounds after the flyTo animation completes
-      // This ensures viewport query fetches cafes in the new location
-      setTimeout(() => {
-        updateMapBounds();
-      }, 1100); // Slightly longer than flyTo duration (1000ms)
-
-      console.log('Centering map on user location - viewport will load cafes');
     }
   }, [userLocation, setSearchQuery, setActiveSearchQuery, updateMapBounds]);
 
@@ -462,7 +463,6 @@ export default function MapView({
     setActiveSearchQuery(query);
     setSelectedCafeId(null);
 
-    console.log(`Searching for cafes matching "${query}"`);
   }, [userLocation]);
 
   // Register search handler with SearchContext so AppHeader can trigger searches
