@@ -4,6 +4,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "next dev --turbopack",
+    "dev:sg": "cross-env NEXT_PUBLIC_SIMULATE_LOCATION=sg next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -34,6 +35,7 @@
     "typescript": "^5.9.3"
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "tsx": "^4.20.6"
   }
 }
