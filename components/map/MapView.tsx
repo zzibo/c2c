@@ -8,8 +8,9 @@ import type { Coordinate, Cafe } from '@/types/cafe';
 import RatingPanel from '@/components/cafe/RatingPanel';
 import { CafeSidebar } from '@/components/map/CafeSidebar';
 import { CafeMarker } from '@/components/map/CafeMarker';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { useAppStore } from '@/lib/store/AppStore';
-import { loadMapState, saveMapState } from '@/lib/storage/mapStorage';
+import { loadMapState, saveMapState, clearMapState } from '@/lib/storage/mapStorage';
 import { useServiceWorker } from '@/hooks/useServiceWorker';
 
 interface MapViewProps {
@@ -30,8 +31,11 @@ export default function MapView({
   // Register service worker for map tile caching
   useServiceWorker();
   
-  // Load persisted state from localStorage
-  const persistedState = loadMapState();
+  // Check for simulated location flag
+  const simulateLocation = typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_SIMULATE_LOCATION : undefined;
+  
+  // Load persisted state from localStorage (but skip if simulation is enabled)
+  const persistedState = simulateLocation === 'sg' ? null : loadMapState();
   
   const [viewState, setViewStateInternal] = useState({
     longitude: persistedState?.viewState?.longitude ?? initialCenter.lng,
@@ -44,6 +48,10 @@ export default function MapView({
   const [selectedCafeId, setSelectedCafeId] = useState<string | null>(null);
   const [selectedCafeForRating, setSelectedCafeForRating] = useState<Cafe | null>(null);
   const [showRatingPanel, setShowRatingPanel] = useState(false);
+
+  // Modal state for "No cafes nearby" prompt
+  const [showNoCafesModal, setShowNoCafesModal] = useState(false);
+  const [isSearchingGeoapify, setIsSearchingGeoapify] = useState(false);
 
   // Track map viewport bounds for viewport-based loading
   const [mapBounds, setMapBounds] = useState<{
@@ -244,6 +252,25 @@ export default function MapView({
   }, [searchQueryContext, debouncedSaveState]);
 
   useEffect(() => {
+    // Check for simulated location (for testing) - check BEFORE checking persisted location
+    const simulateLocation = process.env.NEXT_PUBLIC_SIMULATE_LOCATION;
+    console.log('Simulate location env var:', simulateLocation); // Debug log
+    if (simulateLocation === 'sg') {
+      // Singapore coordinates (Marina Bay area)
+      const singaporeCoords = { lat: 1.3521, lng: 103.8198 };
+      console.log('✅ Simulating location: Singapore', singaporeCoords);
+      setUserLocation(singaporeCoords);
+      setSearchError(null); // Clear any location errors
+      if (cafes.length === 0) {
+        setViewState({
+          longitude: singaporeCoords.lng,
+          latitude: singaporeCoords.lat,
+          zoom: 15
+        });
+      }
+      return;
+    }
+
     // Get user's current location (only if we don't have a persisted location)
     if (userLocation) {
       // Already have location from persistence, skip geolocation
@@ -320,11 +347,10 @@ export default function MapView({
 
     console.log('📍 Updating map bounds:', newBounds);
 
-    // Clear active search when user manually pans the map
-    // This switches to viewport-based loading
-    setActiveSearchQuery(null);
+    // NEVER automatically clear search when map moves
+    // Search mode can only be exited by clicking "Nearby" or "X" button
     setMapBounds(newBounds);
-  }, [setActiveSearchQuery]);
+  }, []);
 
   // Debounced version with 300ms delay
   const debouncedUpdateMapBounds = useMemo(
@@ -459,7 +485,7 @@ export default function MapView({
   }, [cafes, userLocation, calculateDistance]);
 
   // Function to search for cafes around user location
-  const searchAroundMe = useCallback(() => {
+  const searchAroundMe = useCallback(async () => {
     if (!userLocation) {
       setSearchError('Location not available. Please enable location access.');
       return;
@@ -473,11 +499,32 @@ export default function MapView({
     // Center map on user location
     const map = mapRef.current?.getMap();
     if (map) {
-
-      // Listen for moveend event to update bounds after animation
-      const handleMoveEnd = () => {
+      // Listen for moveend event to update bounds and check for cafes
+      const handleMoveEnd = async () => {
         updateMapBounds();
         map.off('moveend', handleMoveEnd); // Remove listener after firing once
+
+        // After map settles, check if there are cafes nearby in the database
+        try {
+          const response = await fetch(
+            `/api/cafes/viewport?` +
+            `north=${userLocation.lat + 0.029}&south=${userLocation.lat - 0.029}&` + // ~2 miles
+            `east=${userLocation.lng + 0.029}&west=${userLocation.lng - 0.029}`
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Cafes in database nearby:', data.count);
+
+            if (data.count === 0) {
+              // No cafes found - show modal
+              console.log('No cafes nearby - showing modal');
+              setShowNoCafesModal(true);
+            }
+          }
+        } catch (error) {
+          console.error('Error checking nearby cafes:', error);
+        }
       };
 
       map.once('moveend', handleMoveEnd);
@@ -565,6 +612,44 @@ export default function MapView({
     // Force update map bounds to reload viewport cafes
     updateMapBounds();
   }, [setSearchQuery, setActiveSearchQuery, updateMapBounds]);
+
+  // Handle "Search for cafes" confirmation from modal
+  const handleSearchGeoapify = useCallback(async () => {
+    if (!userLocation) return;
+
+    setIsSearchingGeoapify(true);
+    console.log('User confirmed - searching Geoapify for nearby cafes...');
+
+    try {
+      // Call the /api/cafes/nearby endpoint which will:
+      // 1. Check database
+      // 2. If < 10 cafes, fetch from Geoapify
+      // 3. Populate database
+      // 4. Return cafes
+      const response = await fetch(
+        `/api/cafes/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}`
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch cafes from Geoapify');
+      }
+
+      const data = await response.json();
+      console.log('Fetched cafes from Geoapify:', data.count);
+
+      // Update map bounds to trigger viewport query and display new cafes
+      updateMapBounds();
+
+      if (data.count === 0) {
+        setSearchError('No cafes found in this area. Try a different location.');
+      }
+    } catch (error) {
+      console.error('Error fetching from Geoapify:', error);
+      setSearchError('Failed to search for cafes. Please try again.');
+    } finally {
+      setIsSearchingGeoapify(false);
+    }
+  }, [userLocation, updateMapBounds]);
 
   // Handle cafe panel item click - open rating panel
   const handleCafeClick = (cafe: Cafe) => {
@@ -732,7 +817,7 @@ export default function MapView({
         isCollapsed={isPanelCollapsed}
         onToggle={handlePanelToggle}
         cafes={cafesWithDistance}
-        isSearching={isSearchingQuery || isLoadingViewport}
+        isSearching={isSearchingQuery || isLoadingViewport || isSearchingGeoapify}
         searchError={searchError}
         searchQuery={searchQueryContext}
         onSearchQueryChange={setSearchQuery}
@@ -783,6 +868,18 @@ export default function MapView({
           }}
         />
       )}
+
+      {/* No Cafes Nearby Modal */}
+      <ConfirmModal
+        isOpen={showNoCafesModal}
+        onClose={() => setShowNoCafesModal(false)}
+        onConfirm={handleSearchGeoapify}
+        title="No Cafes Found Nearby"
+        message="There aren't any cafes nearby in C2C. Would you like us to search and add cafes to the database?"
+        confirmText={isSearchingGeoapify ? "Searching..." : "Yes, search for cafes"}
+        cancelText="No, thanks"
+        confirmVariant="primary"
+      />
     </div>
   );
 }
