@@ -12,25 +12,21 @@ interface VibeSelectionProps {
 
 const VIBES: Array<{
   vibe: VibeType;
-  icon: string;
   title: string;
   description: string;
 }> = [
   {
     vibe: 'lock-in',
-    icon: '🔒',
     title: 'Lock In',
-    description: 'Deep work & focus',
+    description: 'Deep work',
   },
   {
     vibe: 'network',
-    icon: '🤝',
     title: 'Network',
     description: 'Meeting people',
   },
   {
     vibe: 'chill',
-    icon: '😌',
     title: 'Chill',
     description: 'Relaxed vibes',
   },
@@ -58,11 +54,10 @@ export function VibeSelection({ onComplete, isLoading }: VibeSelectionProps) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {VIBES.map(({ vibe, icon, title, description }) => (
+        {VIBES.map(({ vibe, title, description }) => (
           <VibeCard
             key={vibe}
             vibe={vibe}
-            icon={icon}
             title={title}
             description={description}
             selected={selectedVibe === vibe}
