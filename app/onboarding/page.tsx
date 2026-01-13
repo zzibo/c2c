@@ -71,8 +71,8 @@ export default function OnboardingPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center p-4">
-        <div className="w-full max-w-2xl bg-white rounded-lg shadow-lg border-2 border-amber-900 p-8">
+      <main className="flex-1 flex items-center justify-center p-8">
+        <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl border-4 border-gray-900 p-12">
           {step === 'username' && <UsernameStep onNext={handleUsernameNext} />}
           {step === 'vibe' && (
             <VibeSelection onComplete={handleVibeComplete} isLoading={isLoading} />
