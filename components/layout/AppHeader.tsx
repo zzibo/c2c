@@ -1,19 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AuthModal } from '@/components/auth/AuthModal';
-import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { ProfileModal } from './ProfileModal';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useAppStore } from '@/lib/store/AppStore';
 
 export function AppHeader() {
     const pathname = usePathname();
+    const router = useRouter();
     const { user, profile, signOut } = useAuth();
     const [showAuthModal, setShowAuthModal] = useState(false);
-    const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+    const [showProfileModal, setShowProfileModal] = useState(false);
     const { state, setSearchQuery, onSearch, setPanelCollapsed } = useAppStore();
     const { searchQuery, activeSearchQuery, isPanelCollapsed } = state;
 
@@ -147,9 +148,9 @@ export function AppHeader() {
             <div className="fixed top-8 right-16 z-50">
                 {user && profile ? (
                     <button
-                        onClick={() => setShowSignOutConfirm(true)}
+                        onClick={() => setShowProfileModal(true)}
                         className="w-10 h-10 rounded-full bg-c2c-orange text-white flex items-center justify-center text-sm font-semibold shadow-md hover:bg-c2c-orange-dark transition-colors"
-                        title={`Signed in as @${profile.username}. Click to sign out.`}
+                        title={`Signed in as @${profile.username}. Click to view profile options.`}
                     >
                         {userInitial}
                     </button>
@@ -168,15 +169,14 @@ export function AppHeader() {
                 onClose={() => setShowAuthModal(false)}
             />
 
-            <ConfirmModal
-                isOpen={showSignOutConfirm}
-                onClose={() => setShowSignOutConfirm(false)}
-                onConfirm={signOut}
-                title="Sign Out"
-                message={`Are you sure you want to sign out? You'll need to sign in again to access your account.`}
-                confirmText="Sign Out"
-                cancelText="Cancel"
-                confirmVariant="danger"
+            <ProfileModal
+                isOpen={showProfileModal}
+                onClose={() => setShowProfileModal(false)}
+                onChangeVibe={() => {
+                    setShowProfileModal(false);
+                    router.push('/onboarding?edit=true');
+                }}
+                onSignOut={signOut}
             />
         </>
     );
