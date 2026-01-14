@@ -64,7 +64,8 @@ export type VibeType = 'lock-in' | 'network' | 'chill';
 
 // Profile metadata structure
 export type ProfileMetadata = {
-  vibe: VibeType;
+  vibe?: VibeType; // Legacy single vibe (for backward compatibility)
+  vibes?: VibeType[]; // New: array of vibes
   onboarded_at?: string;
   preferences?: {
     notifications?: boolean;
@@ -91,7 +92,8 @@ export type Profile = {
 export type ProfileWithStats = {
   id: string;
   username: string;
-  vibe: VibeType | null;
+  vibe: VibeType | null; // Legacy single vibe
+  vibes?: VibeType[] | null; // New: array of vibes
   is_onboarded: boolean;
   total_ratings: number;
   avg_rating: number;

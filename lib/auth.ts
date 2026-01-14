@@ -47,10 +47,12 @@ export async function checkOnboardingStatus(userId: string): Promise<Profile | n
 export async function createProfile(
   userId: string,
   username: string,
-  vibe: VibeType
+  vibes: VibeType[]
 ): Promise<Profile> {
   const metadata: ProfileMetadata = {
-    vibe,
+    vibes,
+    // Keep legacy vibe for backward compatibility (use first vibe)
+    vibe: vibes[0],
     onboarded_at: new Date().toISOString(),
   };
 
@@ -76,7 +78,8 @@ export async function updateProfile(
   userId: string,
   updates: {
     username?: string;
-    vibe?: VibeType;
+    vibe?: VibeType; // Legacy single vibe
+    vibes?: VibeType[]; // New: array of vibes
     metadata?: Partial<ProfileMetadata>;
   }
 ): Promise<Profile> {
@@ -92,12 +95,24 @@ export async function updateProfile(
     updateData.username = updates.username;
   }
 
-  if (updates.vibe || updates.metadata) {
-    updateData.metadata = {
+  if (updates.vibes || updates.vibe || updates.metadata) {
+    const newMetadata: ProfileMetadata = {
       ...currentProfile?.metadata,
       ...updates.metadata,
-      ...(updates.vibe && { vibe: updates.vibe }),
     };
+
+    // Handle vibes array update
+    if (updates.vibes !== undefined) {
+      newMetadata.vibes = updates.vibes;
+      // Keep legacy vibe for backward compatibility (use first vibe)
+      newMetadata.vibe = updates.vibes[0];
+    } else if (updates.vibe) {
+      // Legacy: if only single vibe is provided, convert to array
+      newMetadata.vibe = updates.vibe;
+      newMetadata.vibes = [updates.vibe];
+    }
+
+    updateData.metadata = newMetadata;
   }
 
   const { data, error } = await supabase
