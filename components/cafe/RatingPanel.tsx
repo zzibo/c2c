@@ -4,10 +4,12 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { X, Edit2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { Cafe, Rating, RatingWithUser } from '@/types/cafe';
+import type { Cafe, RatingWithUser } from '@/types/cafe';
 import StarRating from '@/components/ui/StarRating';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { useAuth } from '@/lib/auth/AuthContext';
+import { ImageUpload } from '@/components/ui/ImageUpload';
+import { ImageCarousel } from '@/components/ui/ImageCarousel';
 
 interface RatingPanelProps {
   cafe: Cafe;
@@ -24,6 +26,7 @@ interface RatingFormData {
   seating_rating: number | null;
   noise_rating: number | null;
   comment: string;
+  photos: string[];
 }
 
 export default function RatingPanel({
@@ -47,6 +50,7 @@ export default function RatingPanel({
     seating_rating: null,
     noise_rating: null,
     comment: '',
+    photos: [],
   });
 
   // ✅ PERFORMANCE FIX: Fetch user's rating with React Query
@@ -77,6 +81,11 @@ export default function RatingPanel({
   const allRatings = ratingsData?.ratings || [];
   const userRating = userRatingData?.rating || null;
 
+  // Extract all photos from ratings for carousel
+  const allPhotos = allRatings
+    .flatMap((r: RatingWithUser) => r.photos || [])
+    .filter(Boolean);
+
   // Update form when user rating changes
   useEffect(() => {
     if (userRating) {
@@ -88,6 +97,7 @@ export default function RatingPanel({
         seating_rating: userRating.seating_rating,
         noise_rating: userRating.noise_rating,
         comment: userRating.comment || '',
+        photos: userRating.photos || [],
       });
     } else {
       // Reset form for new rating
@@ -99,6 +109,7 @@ export default function RatingPanel({
         seating_rating: null,
         noise_rating: null,
         comment: '',
+        photos: [],
       });
     }
   }, [userRating]);
@@ -117,6 +128,19 @@ export default function RatingPanel({
       ...prev,
       comment: e.target.value,
     }));
+  };
+
+  // Handle image changes
+  const handleImagesChange = (images: string[]) => {
+    console.log('📷 RatingPanel received images:', images);
+    setFormData((prev) => {
+      const newState = {
+        ...prev,
+        photos: images,
+      };
+      console.log('📝 Updated formData.photos:', newState.photos);
+      return newState;
+    });
   };
 
   // Validate form
@@ -276,6 +300,7 @@ export default function RatingPanel({
         seating_rating: userRating.seating_rating,
         noise_rating: userRating.noise_rating,
         comment: userRating.comment || '',
+        photos: userRating.photos || [],
       });
     }
   };
@@ -311,22 +336,17 @@ export default function RatingPanel({
       >
         {/* Header */}
         <div className="sticky top-0 bg-c2c-base border-b-2 border-c2c-orange z-10">
-          {/* Logo Section - 15% */}
+          {/* Photo Carousel Section - 15% */}
           <div className="h-[15vh] flex items-center justify-center bg-gray-50 border-b-2 border-c2c-orange relative">
-            <Image
-              src="/assets/c2c-icon.webp"
-              alt="C2C"
-              width={80}
-              height={80}
-              className="object-contain pixel-image"
-              unoptimized
-              priority
-              fetchPriority="high"
+            <ImageCarousel
+              images={allPhotos}
+              fallbackImage="/assets/c2c-icon.webp"
+              className="w-full h-full"
             />
             {/* Close button */}
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 p-2 hover:bg-gray-200 rounded transition-colors"
+              className="absolute top-4 right-4 p-2 hover:bg-gray-200 rounded transition-colors z-10"
               aria-label="Close panel"
             >
               <X size={20} className="text-c2c-orange" />
@@ -421,6 +441,22 @@ export default function RatingPanel({
                       <p className="text-sm text-gray-900 mt-2 italic">
                         "{userRating.comment}"
                       </p>
+                    )}
+                    {userRating.photos && userRating.photos.length > 0 && (
+                      <div className="mt-2 grid grid-cols-2 gap-1">
+                        {userRating.photos.map((url: string, idx: number) => (
+                          <div key={idx} className="aspect-square rounded overflow-hidden border border-gray-300">
+                            <Image
+                              src={url}
+                              alt={`Photo ${idx + 1}`}
+                              width={150}
+                              height={150}
+                              className="w-full h-full object-cover"
+                              unoptimized
+                            />
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -571,6 +607,27 @@ export default function RatingPanel({
                       </p>
                     </div>
 
+                    {/* Photo Upload */}
+                    <div className="mt-3">
+                      <label className="text-xs text-c2c-orange block mb-1">
+                        Photo (optional)
+                      </label>
+                      <ImageUpload
+                        cafeId={cafe.id}
+                        ratingId={userRating?.id}
+                        existingImages={formData.photos || []}
+                        onImagesChange={handleImagesChange}
+                        maxImages={1}
+                        disabled={!user}
+                      />
+                      {/* Debug: Show current photos state */}
+                      {formData.photos && formData.photos.length > 0 && (
+                        <p className="text-xs text-green-600 mt-1">
+                          ✓ {formData.photos.length} photo(s) ready to submit
+                        </p>
+                      )}
+                    </div>
+
                     {/* Submit Buttons */}
                     <div className="flex gap-2 mt-4">
                       <button
@@ -634,6 +691,24 @@ export default function RatingPanel({
 
                         {rating.comment && (
                           <p className="text-sm text-c2c-orange mt-2">{rating.comment}</p>
+                        )}
+
+                        {/* Show photos if any exist */}
+                        {rating.photos && rating.photos.length > 0 && (
+                          <div className="mt-2 grid grid-cols-2 gap-1">
+                            {rating.photos.map((url: string, idx: number) => (
+                              <div key={idx} className="aspect-square rounded overflow-hidden border border-c2c-orange/40">
+                                <Image
+                                  src={url}
+                                  alt={`Photo ${idx + 1}`}
+                                  width={150}
+                                  height={150}
+                                  className="w-full h-full object-cover"
+                                  unoptimized
+                                />
+                              </div>
+                            ))}
+                          </div>
                         )}
 
                         {/* Show category ratings if any exist */}
