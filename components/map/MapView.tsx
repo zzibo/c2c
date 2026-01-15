@@ -6,6 +6,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { useQuery } from '@tanstack/react-query';
 import type { Coordinate, Cafe } from '@/types/cafe';
 import RatingPanel from '@/components/cafe/RatingPanel';
+import ExpandedCafeView from '@/components/cafe/ExpandedCafeView';
 import { CafeSidebar } from '@/components/map/CafeSidebar';
 import { CafeMarker } from '@/components/map/CafeMarker';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -48,6 +49,7 @@ export default function MapView({
   const [selectedCafeId, setSelectedCafeId] = useState<string | null>(null);
   const [selectedCafeForRating, setSelectedCafeForRating] = useState<Cafe | null>(null);
   const [showRatingPanel, setShowRatingPanel] = useState(false);
+  const [showExpandedView, setShowExpandedView] = useState(false);
 
   // Modal state for "No cafes nearby" prompt
   const [showNoCafesModal, setShowNoCafesModal] = useState(false);
@@ -858,6 +860,28 @@ export default function MapView({
           isOpen={showRatingPanel}
           onClose={() => {
             setShowRatingPanel(false);
+            setSelectedCafeForRating(null);
+          }}
+          onRatingSubmitted={() => {
+            // Refresh cafe list to get updated ratings
+            if (userLocation) {
+              searchAroundMe();
+            }
+          }}
+          onExpand={() => {
+            setShowRatingPanel(false);
+            setShowExpandedView(true);
+          }}
+        />
+      )}
+
+      {/* Expanded Cafe View */}
+      {selectedCafeForRating && (
+        <ExpandedCafeView
+          cafe={selectedCafeForRating}
+          isOpen={showExpandedView}
+          onClose={() => {
+            setShowExpandedView(false);
             setSelectedCafeForRating(null);
           }}
           onRatingSubmitted={() => {
