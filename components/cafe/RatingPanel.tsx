@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
-import { X, Edit2 } from 'lucide-react';
+import { X, Edit2, Expand } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Cafe, RatingWithUser } from '@/types/cafe';
 import StarRating from '@/components/ui/StarRating';
@@ -16,6 +16,7 @@ interface RatingPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onRatingSubmitted: () => void;
+  onExpand?: () => void;
 }
 
 interface RatingFormData {
@@ -34,6 +35,7 @@ export default function RatingPanel({
   isOpen,
   onClose,
   onRatingSubmitted,
+  onExpand,
 }: RatingPanelProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -343,14 +345,25 @@ export default function RatingPanel({
               fallbackImage="/assets/c2c-icon.webp"
               className="w-full h-full"
             />
-            {/* Close button */}
-            <button
-              onClick={onClose}
-              className="absolute top-4 right-4 p-2 hover:bg-gray-200 rounded transition-colors z-10"
-              aria-label="Close panel"
-            >
-              <X size={20} className="text-c2c-orange" />
-            </button>
+            {/* Expand and Close buttons */}
+            <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+              {onExpand && (
+                <button
+                  onClick={onExpand}
+                  className="p-2 bg-white/80 hover:bg-white rounded transition-colors shadow-sm"
+                  aria-label="Expand view"
+                >
+                  <Expand size={20} className="text-c2c-orange" />
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className="p-2 bg-white/80 hover:bg-white rounded transition-colors shadow-sm"
+                aria-label="Close panel"
+              >
+                <X size={20} className="text-c2c-orange" />
+              </button>
+            </div>
           </div>
 
           {/* Cafe Info */}
