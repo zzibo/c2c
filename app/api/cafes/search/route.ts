@@ -4,9 +4,10 @@ import { NextRequest, NextResponse } from 'next/server';
 const GEOAPIFY_AUTOCOMPLETE_URL = 'https://api.geoapify.com/v1/geocode/autocomplete';
 const GEOAPIFY_PLACES_URL = 'https://api.geoapify.com/v2/places';
 
-// Search radius: 50 miles to cover wider area for name search
-const SEARCH_RADIUS_METERS = 80467; // 50 miles
-const MAX_RESULTS = 100;
+// Search radius: 10 miles for more focused results
+const SEARCH_RADIUS_METERS = 16093; // 10 miles
+const FETCH_LIMIT = 200; // Fetch up to 200 from Geoapify
+const MAX_RESULTS = 100; // Show max 100 to user
 
 export async function GET(request: NextRequest) {
   try {
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
     const url = new URL(GEOAPIFY_PLACES_URL);
     url.searchParams.append('categories', 'catering.cafe');
     url.searchParams.append('filter', `circle:${longitude},${latitude},${SEARCH_RADIUS_METERS}`);
-    url.searchParams.append('limit', '500'); // Get more results to filter by name
+    url.searchParams.append('limit', String(FETCH_LIMIT)); // Fetch up to 200 cafes
     url.searchParams.append('apiKey', apiKey);
 
     // Fetch from Geoapify Places API
@@ -68,12 +69,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Filter results by name match and calculate distance
-    const searchLower = query.toLowerCase();
+    // Normalize search query for lenient matching
+    const searchLower = query.toLowerCase().trim();
+    const searchNormalized = normalizeString(searchLower);
+    const searchWords = searchNormalized.split(/\s+/).filter(w => w.length > 0);
+
     const cafesWithDistance = (data.features || [])
       .map((place: any) => {
         const props = place.properties;
         const cafeName = props.name || props.address_line1 || '';
+        const cafeNameLower = cafeName.toLowerCase();
+        const cafeNameNormalized = normalizeString(cafeNameLower);
 
         // Calculate distance from user location
         const distance = calculateDistance(
@@ -81,6 +87,15 @@ export async function GET(request: NextRequest) {
           longitude,
           props.lat,
           props.lon
+        );
+
+        // Calculate relevance score (higher = better match)
+        const relevanceScore = calculateRelevanceScore(
+          searchLower,
+          searchNormalized,
+          searchWords,
+          cafeNameLower,
+          cafeNameNormalized
         );
 
         return {
@@ -109,13 +124,18 @@ export async function GET(request: NextRequest) {
             hourstText: props.opening_hours,
           },
           distance,
-          nameMatch: cafeName.toLowerCase().includes(searchLower),
+          relevanceScore,
         };
       })
-      // Filter: only include cafes with names matching the search query
-      .filter((item: any) => item.nameMatch)
-      // Sort by distance (closest first)
-      .sort((a: any, b: any) => a.distance - b.distance)
+      // Filter: only include cafes with some match (relevance > 0)
+      .filter((item: any) => item.relevanceScore > 0)
+      // Sort by relevance (highest first), then by distance (closest first)
+      .sort((a: any, b: any) => {
+        if (b.relevanceScore !== a.relevanceScore) {
+          return b.relevanceScore - a.relevanceScore;
+        }
+        return a.distance - b.distance;
+      })
       // Take top 100
       .slice(0, MAX_RESULTS)
       // Extract just the cafe object
@@ -128,7 +148,7 @@ export async function GET(request: NextRequest) {
       searchQuery: query,
       searchCenter: { lat: latitude, lng: longitude },
       radiusMeters: SEARCH_RADIUS_METERS,
-      radiusMiles: 50,
+      radiusMiles: 10,
       provider: 'Geoapify',
     });
 
@@ -139,6 +159,137 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Normalize string by removing special characters and extra spaces
+ */
+function normalizeString(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '') // Remove special characters
+    .replace(/\s+/g, ' ') // Normalize spaces
+    .trim();
+}
+
+/**
+ * Calculate simple Levenshtein distance (edit distance)
+ * Returns the minimum number of single-character edits needed
+ */
+function levenshteinDistance(str1: string, str2: string): number {
+  const m = str1.length;
+  const n = str2.length;
+  const dp: number[][] = [];
+
+  for (let i = 0; i <= m; i++) {
+    dp[i] = [i];
+  }
+  for (let j = 0; j <= n; j++) {
+    dp[0][j] = j;
+  }
+
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (str1[i - 1] === str2[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1];
+      } else {
+        dp[i][j] = Math.min(
+          dp[i - 1][j] + 1, // deletion
+          dp[i][j - 1] + 1, // insertion
+          dp[i - 1][j - 1] + 1 // substitution
+        );
+      }
+    }
+  }
+
+  return dp[m][n];
+}
+
+/**
+ * Calculate relevance score for a cafe name match
+ * Returns a score from 0-100, where higher is better
+ */
+function calculateRelevanceScore(
+  searchLower: string,
+  searchNormalized: string,
+  searchWords: string[],
+  cafeNameLower: string,
+  cafeNameNormalized: string
+): number {
+  let score = 0;
+
+  // Exact match (case-insensitive) - highest priority
+  if (cafeNameLower === searchLower) {
+    return 100;
+  }
+
+  // Exact match (normalized, no special chars)
+  if (cafeNameNormalized === searchNormalized) {
+    return 95;
+  }
+
+  // Starts with search query
+  if (cafeNameLower.startsWith(searchLower)) {
+    score += 80;
+  } else if (cafeNameNormalized.startsWith(searchNormalized)) {
+    score += 75;
+  }
+
+  // Contains search query as substring
+  if (cafeNameLower.includes(searchLower)) {
+    score += 60;
+  } else if (cafeNameNormalized.includes(searchNormalized)) {
+    score += 55;
+  }
+
+  // Word boundary matching - check if all search words appear in cafe name
+  if (searchWords.length > 0) {
+    const cafeWords = cafeNameNormalized.split(/\s+/);
+    const cafeWordsLower = cafeNameLower.split(/\s+/);
+    
+    let wordsMatched = 0;
+    for (const searchWord of searchWords) {
+      // Check if any cafe word starts with or equals the search word
+      const wordMatch = cafeWords.some(cafeWord => 
+        cafeWord === searchWord || cafeWord.startsWith(searchWord)
+      ) || cafeWordsLower.some(cafeWord => 
+        cafeWord.includes(searchWord)
+      );
+      
+      if (wordMatch) {
+        wordsMatched++;
+      }
+    }
+    
+    // Score based on percentage of words matched
+    const wordMatchRatio = wordsMatched / searchWords.length;
+    score += wordMatchRatio * 50; // Up to 50 points for word matching
+  }
+
+  // Fuzzy matching for typos (only if no strong match yet)
+  if (score < 50 && searchLower.length >= 3) {
+    const distance = levenshteinDistance(searchLower, cafeNameLower);
+    const maxLen = Math.max(searchLower.length, cafeNameLower.length);
+    const similarity = 1 - (distance / maxLen);
+    
+    // Only apply fuzzy match if similarity is reasonable (>= 70%)
+    if (similarity >= 0.7) {
+      score = Math.max(score, similarity * 40); // Up to 40 points for fuzzy match
+    }
+  }
+
+  // Partial word matching - check if search appears as part of any word
+  if (score < 30) {
+    const cafeWords = cafeNameNormalized.split(/\s+/);
+    for (const word of cafeWords) {
+      if (word.includes(searchNormalized) || searchNormalized.includes(word)) {
+        score = Math.max(score, 25);
+        break;
+      }
+    }
+  }
+
+  return Math.min(100, Math.round(score));
 }
 
 /**
