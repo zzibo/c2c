@@ -2,6 +2,26 @@
 
 import { createContext, useContext, useReducer, ReactNode, useCallback, useRef } from 'react';
 
+// Search filters interface
+export interface SearchFilters {
+  maxDistance: number;
+  minOverallRating: number;
+  minWifiRating: number;
+  minOutletsRating: number;
+  minCoffeeRating: number;
+  minVibeRating: number;
+  minSeatingRating: number;
+  minNoiseRating: number;
+  minReviews: number;
+  sortBy: 'relevance' | 'distance' | 'rating' | 'reviews';
+  hasWifi: boolean | null;
+  hasOutlets: boolean | null;
+  goodForWork: boolean | null;
+  quietWorkspace: boolean | null;
+  spacious: boolean | null;
+  maxPriceLevel: number;
+}
+
 // State interface
 interface AppState {
   // Sidebar state
@@ -10,6 +30,7 @@ interface AppState {
   // Search state
   searchQuery: string; // Current text in search input
   activeSearchQuery: string | null; // Active search triggering API call (null = viewport mode)
+  searchFilters: SearchFilters; // Search filter preferences
 }
 
 // Action types
@@ -17,13 +38,35 @@ type AppAction =
   | { type: 'SET_PANEL_COLLAPSED'; payload: boolean }
   | { type: 'SET_SEARCH_QUERY'; payload: string }
   | { type: 'SET_ACTIVE_SEARCH_QUERY'; payload: string | null }
+  | { type: 'SET_SEARCH_FILTERS'; payload: SearchFilters }
   | { type: 'CLEAR_SEARCH' };
+
+// Default filters
+const defaultFilters: SearchFilters = {
+  maxDistance: 10,
+  minOverallRating: 0,
+  minWifiRating: 0,
+  minOutletsRating: 0,
+  minCoffeeRating: 0,
+  minVibeRating: 0,
+  minSeatingRating: 0,
+  minNoiseRating: 0,
+  minReviews: 0,
+  sortBy: 'relevance',
+  hasWifi: null,
+  hasOutlets: null,
+  goodForWork: null,
+  quietWorkspace: null,
+  spacious: null,
+  maxPriceLevel: -1,
+};
 
 // Initial state
 const initialState: AppState = {
   isPanelCollapsed: false,
   searchQuery: '',
   activeSearchQuery: null,
+  searchFilters: defaultFilters,
 };
 
 // Reducer
@@ -37,6 +80,9 @@ function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'SET_ACTIVE_SEARCH_QUERY':
       return { ...state, activeSearchQuery: action.payload };
+
+    case 'SET_SEARCH_FILTERS':
+      return { ...state, searchFilters: action.payload };
 
     case 'CLEAR_SEARCH':
       return { ...state, searchQuery: '', activeSearchQuery: null };
@@ -54,6 +100,7 @@ interface AppContextType {
   setPanelCollapsed: (collapsed: boolean) => void;
   setSearchQuery: (query: string) => void;
   setActiveSearchQuery: (query: string | null) => void;
+  setSearchFilters: (filters: SearchFilters) => void;
   clearSearch: () => void;
   // Search handler registration (for component communication)
   registerSearchHandler: (handler: (query: string) => void) => void;
@@ -67,17 +114,34 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState, (initial) => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('mapState');
+      const storedFilters = localStorage.getItem('searchFilters');
+      let parsedState = initial;
+      let parsedFilters = defaultFilters;
+
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-          return {
+          parsedState = {
             ...initial,
             isPanelCollapsed: parsed.isPanelCollapsed ?? initial.isPanelCollapsed,
           };
         } catch {
-          return initial;
+          // Keep initial
         }
       }
+
+      if (storedFilters) {
+        try {
+          parsedFilters = JSON.parse(storedFilters);
+        } catch {
+          // Keep default
+        }
+      }
+
+      return {
+        ...parsedState,
+        searchFilters: parsedFilters,
+      };
     }
     return initial;
   });
@@ -96,6 +160,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const setActiveSearchQuery = useCallback((query: string | null) => {
     dispatch({ type: 'SET_ACTIVE_SEARCH_QUERY', payload: query });
+  }, []);
+
+  const setSearchFilters = useCallback((filters: SearchFilters) => {
+    dispatch({ type: 'SET_SEARCH_FILTERS', payload: filters });
+    // Save to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('searchFilters', JSON.stringify(filters));
+    }
   }, []);
 
   const clearSearch = useCallback(() => {
@@ -120,6 +192,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setPanelCollapsed,
     setSearchQuery,
     setActiveSearchQuery,
+    setSearchFilters,
     clearSearch,
     registerSearchHandler,
     onSearch,

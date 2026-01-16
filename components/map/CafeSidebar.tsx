@@ -1,9 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, MapPin, Star } from 'lucide-react';
+import { ChevronRight, MapPin, Star, Filter } from 'lucide-react';
 import type { Cafe, Coordinate } from '@/types/cafe';
+import { FilterModal } from '@/components/ui/FilterModal';
+import { useAppStore } from '@/lib/store/AppStore';
 
 type CafeSidebarProps = {
     isCollapsed: boolean;
@@ -46,6 +48,28 @@ export function CafeSidebar({
     panelRef,
     formatDistance,
 }: CafeSidebarProps) {
+    const [showFilterModal, setShowFilterModal] = useState(false);
+    const { state, setSearchFilters, onSearch } = useAppStore();
+    const { searchFilters, activeSearchQuery } = state;
+
+    // Check if any filters are active (not default values)
+    const hasActiveFilters = 
+        searchFilters.maxDistance !== 10 ||
+        searchFilters.minOverallRating > 0 ||
+        searchFilters.minWifiRating > 0 ||
+        searchFilters.minOutletsRating > 0 ||
+        searchFilters.minCoffeeRating > 0 ||
+        searchFilters.minVibeRating > 0 ||
+        searchFilters.minSeatingRating > 0 ||
+        searchFilters.minNoiseRating > 0 ||
+        searchFilters.minReviews > 0 ||
+        searchFilters.sortBy !== 'relevance' ||
+        searchFilters.hasWifi !== null ||
+        searchFilters.hasOutlets !== null ||
+        searchFilters.goodForWork !== null ||
+        searchFilters.quietWorkspace !== null ||
+        searchFilters.spacious !== null ||
+        searchFilters.maxPriceLevel > 0;
     return (
         <div className="absolute left-4 md:left-6 top-24 md:top-28 z-50 flex items-start gap-2">
             {/* Sidebar Panel */}
@@ -89,7 +113,7 @@ export function CafeSidebar({
 
                         <form onSubmit={onSearchSubmit} className="mb-3">
                             <div className="flex items-center gap-2">
-                                <div className="flex flex-row items-center border border-c2c-orange rounded-lg px-2">
+                                <div className="flex flex-row items-center border border-c2c-orange rounded-lg px-2 flex-1">
                                     <svg
                                         xmlns="http://www.w3.org/2000/svg"
                                         className="h-4 w-4 text-c2c-orange pointer-events-none"
@@ -114,7 +138,6 @@ export function CafeSidebar({
                                         disabled={!userLocation || isSearching}
                                     />
                                    
-                                 
                                     {/* Clear button - only show when there's a search query or showing search results */}
                                     <AnimatePresence>
                                         {(searchQuery || isShowingSearchResults) && (
@@ -124,7 +147,7 @@ export function CafeSidebar({
                                                 initial={{ opacity: 0, scale: 0.8 }}
                                                 animate={{ opacity: 1, scale: 1 }}
                                                 exit={{ opacity: 0, scale: 0.8 }}
-                                                className=" text-c2c-orange hover:text-c2c-orange-dark transition-colors"
+                                                className="text-c2c-orange hover:text-c2c-orange-dark transition-colors"
                                                 whileHover={{ scale: 1.1 }}
                                                 whileTap={{ scale: 0.9 }}
                                             >
@@ -204,24 +227,39 @@ export function CafeSidebar({
                                 </AnimatePresence>
                             </motion.button>
 
-                            {/* Results count */}
-                            <AnimatePresence>
-                                {cafes.length > 0 && (
-                                    <motion.div
-                                        initial={{ scale: 0, opacity: 0 }}
-                                        animate={{ scale: 1, opacity: 1 }}
-                                        exit={{ scale: 0, opacity: 0 }}
-                                        transition={{
-                                            type: "spring",
-                                            stiffness: 500,
-                                            damping: 25
+                            {/* Results count - always visible */}
+                            <div className="bg-c2c-orange text-white px-3 py-2 rounded text-sm font-medium">
+                                {cafes.length}
+                            </div>
+
+                            {/* Filter button - always visible */}
+                            <button
+                                type="button"
+                                onClick={() => setShowFilterModal(true)}
+                                className={`relative p-2 rounded transition-all ${
+                                    hasActiveFilters
+                                        ? 'bg-c2c-orange text-white'
+                                        : 'bg-c2c-base border border-c2c-orange text-c2c-orange hover:bg-c2c-orange hover:text-white'
+                                }`}
+                                title={hasActiveFilters ? "Filters active - Click to adjust" : "Filter results"}
+                            >
+                                <Filter className="h-4 w-4" />
+                                {/* Visual indicator when filters are active - pulsing dot */}
+                                {hasActiveFilters && (
+                                    <motion.span
+                                        className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white rounded-full border-2 border-c2c-orange-dark"
+                                        animate={{
+                                            scale: [1, 1.2, 1],
+                                            opacity: [1, 0.7, 1]
                                         }}
-                                        className="bg-c2c-orange text-white px-3 py-2 rounded text-sm font-medium flex items-center"
-                                    >
-                                        {cafes.length}
-                                    </motion.div>
+                                        transition={{
+                                            duration: 2,
+                                            repeat: Infinity,
+                                            ease: "easeInOut"
+                                        }}
+                                    />
                                 )}
-                            </AnimatePresence>
+                            </button>
                         </div>
 
                         {/* Error message */}
@@ -367,6 +405,18 @@ export function CafeSidebar({
                     <ChevronRight size={18} className="text-c2c-orange" />
                 </motion.div>
             </motion.button>
+
+            {/* Filter Modal */}
+            <FilterModal
+                isOpen={showFilterModal}
+                onClose={() => setShowFilterModal(false)}
+                filters={searchFilters}
+                onFiltersChange={setSearchFilters}
+                onApply={() => {
+                    // Filters are in query keys, so queries will auto-refetch
+                    // No need to manually trigger - React Query handles it
+                }}
+            />
         </div>
     );
 }
