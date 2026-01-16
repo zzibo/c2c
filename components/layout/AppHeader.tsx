@@ -6,8 +6,10 @@ import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { ProfileModal } from './ProfileModal';
+import { FilterModal } from '@/components/ui/FilterModal';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useAppStore } from '@/lib/store/AppStore';
+import { Filter } from 'lucide-react';
 
 export function AppHeader() {
     const pathname = usePathname();
@@ -15,8 +17,9 @@ export function AppHeader() {
     const { user, profile, signOut } = useAuth();
     const [showAuthModal, setShowAuthModal] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
-    const { state, setSearchQuery, onSearch, setPanelCollapsed } = useAppStore();
-    const { searchQuery, activeSearchQuery, isPanelCollapsed } = state;
+    const [showFilterModal, setShowFilterModal] = useState(false);
+    const { state, setSearchQuery, onSearch, setPanelCollapsed, setSearchFilters } = useAppStore();
+    const { searchQuery, activeSearchQuery, isPanelCollapsed, searchFilters } = state;
 
     // Consider it "searching" if there's an active search query
     const isSearching = !!activeSearchQuery;
@@ -92,7 +95,7 @@ export function AppHeader() {
                                     delay: 0.05
                                 }}
                             >
-                                <form onSubmit={handleSearchSubmit} className="flex justify-center items-center w-full">
+                                <form onSubmit={handleSearchSubmit} className="flex justify-center items-center w-full relative">
                                     <input
                                         type="text"
                                         value={searchQuery}
@@ -105,14 +108,26 @@ export function AppHeader() {
                                         }}
                                         placeholder="Search cafes"
                                         disabled={isSearching}
-                                        className="w-full px-3 py-2 bg-transparent rounded-full font-bold text-c2c-orange placeholder-c2c-orange focus:outline-none focus:ring-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="w-full px-3 py-2 pr-20 bg-transparent rounded-full font-bold text-c2c-orange placeholder-c2c-orange focus:outline-none focus:ring-0 disabled:opacity-50 disabled:cursor-not-allowed"
                                     />
+                                    {/* Filter button - show when searching */}
+                                    {isSearching && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowFilterModal(true)}
+                                            className="absolute right-10 p-2 rounded-full bg-c2c-orange/10 hover:bg-c2c-orange/20 border border-c2c-orange/30 hover:border-c2c-orange text-c2c-orange transition-colors"
+                                            aria-label="Filter"
+                                            title="Filter results"
+                                        >
+                                            <Filter className="h-4 w-4" />
+                                        </button>
+                                    )}
                                     {/* Right submit button */}
                                     <button
                                         type="submit"
                                         onClick={handleSearchClick}
                                         disabled={isSearching || !searchQuery.trim()}
-                                        className="absolute right-2 p-4 rounded-full bg-transparent text-c2c-orange font-bold hover:bg-c2c-orange/20 hover:border hover:border-c2c-orange transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="absolute right-2 p-2 rounded-full bg-transparent text-c2c-orange font-bold hover:bg-c2c-orange/20 hover:border hover:border-c2c-orange transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                         aria-label="Search"
                                     >
                                         {isSearching ? (
@@ -177,6 +192,19 @@ export function AppHeader() {
                     router.push('/onboarding?edit=true');
                 }}
                 onSignOut={signOut}
+            />
+
+            <FilterModal
+                isOpen={showFilterModal}
+                onClose={() => setShowFilterModal(false)}
+                filters={searchFilters}
+                onFiltersChange={setSearchFilters}
+                onApply={() => {
+                    // Trigger search refresh by updating active search query
+                    if (activeSearchQuery) {
+                        onSearch(activeSearchQuery);
+                    }
+                }}
             />
         </>
     );

@@ -66,7 +66,7 @@ export default function MapView({
 
   // Use AppStore for global state management (replaces SearchContext + SidebarContext)
   const { state, setSearchQuery, setActiveSearchQuery, setPanelCollapsed, registerSearchHandler } = useAppStore();
-  const { searchQuery: searchQueryContext, activeSearchQuery, isPanelCollapsed } = state;
+  const { searchQuery: searchQueryContext, activeSearchQuery, isPanelCollapsed, searchFilters } = state;
   const { showToast } = useToast();
 
   // Search Query - fetches cafes by name
@@ -75,13 +75,36 @@ export default function MapView({
     isLoading: isSearchingQuery,
     error: searchQueryError,
   } = useQuery({
-    queryKey: ['cafes-search', activeSearchQuery, userLocation],
+    queryKey: ['cafes-search', activeSearchQuery, userLocation, searchFilters],
     queryFn: async () => {
       if (!activeSearchQuery || !userLocation) return { cafes: [] };
 
-      const response = await fetch(
-        `/api/cafes/search?q=${encodeURIComponent(activeSearchQuery)}&lat=${userLocation.lat}&lng=${userLocation.lng}`
-      );
+      // Build query string with filters
+      const params = new URLSearchParams({
+        q: activeSearchQuery,
+        lat: userLocation.lat.toString(),
+        lng: userLocation.lng.toString(),
+      });
+
+      // Add filter parameters
+      if (searchFilters.maxDistance > 0) params.append('maxDistance', searchFilters.maxDistance.toString());
+      if (searchFilters.minOverallRating > 0) params.append('minOverallRating', searchFilters.minOverallRating.toString());
+      if (searchFilters.minWifiRating > 0) params.append('minWifiRating', searchFilters.minWifiRating.toString());
+      if (searchFilters.minOutletsRating > 0) params.append('minOutletsRating', searchFilters.minOutletsRating.toString());
+      if (searchFilters.minCoffeeRating > 0) params.append('minCoffeeRating', searchFilters.minCoffeeRating.toString());
+      if (searchFilters.minVibeRating > 0) params.append('minVibeRating', searchFilters.minVibeRating.toString());
+      if (searchFilters.minSeatingRating > 0) params.append('minSeatingRating', searchFilters.minSeatingRating.toString());
+      if (searchFilters.minNoiseRating > 0) params.append('minNoiseRating', searchFilters.minNoiseRating.toString());
+      if (searchFilters.minReviews > 0) params.append('minReviews', searchFilters.minReviews.toString());
+      params.append('sortBy', searchFilters.sortBy);
+      if (searchFilters.hasWifi !== null) params.append('hasWifi', searchFilters.hasWifi.toString());
+      if (searchFilters.hasOutlets !== null) params.append('hasOutlets', searchFilters.hasOutlets.toString());
+      if (searchFilters.goodForWork !== null) params.append('goodForWork', searchFilters.goodForWork.toString());
+      if (searchFilters.quietWorkspace !== null) params.append('quietWorkspace', searchFilters.quietWorkspace.toString());
+      if (searchFilters.spacious !== null) params.append('spacious', searchFilters.spacious.toString());
+      if (searchFilters.maxPriceLevel > 0) params.append('maxPriceLevel', searchFilters.maxPriceLevel.toString());
+
+      const response = await fetch(`/api/cafes/search?${params.toString()}`);
 
       if (!response.ok) {
         const data = await response.json();
@@ -90,14 +113,8 @@ export default function MapView({
 
       const data = await response.json();
 
-      // Sort by distance from user
-      const sortedResults = (data.cafes || []).sort((a: Cafe, b: Cafe) => {
-        const distA = a.distance || Infinity;
-        const distB = b.distance || Infinity;
-        return distA - distB;
-      });
-
-      return { cafes: sortedResults, count: sortedResults.length };
+      // API already handles sorting based on filters
+      return { cafes: data.cafes || [], count: data.count || 0 };
     },
     enabled: !!activeSearchQuery && !!userLocation,  // Only fetch when there's an active search
     staleTime: 60000,  // Cache for 1 minute
@@ -110,7 +127,7 @@ export default function MapView({
     isLoading: isLoadingViewport,
     error: viewportError,
   } = useQuery({
-    queryKey: ['cafes-viewport', mapBounds],
+    queryKey: ['cafes-viewport', mapBounds, searchFilters],
     queryFn: async () => {
       if (!mapBounds) return { cafes: [] };
 
@@ -119,11 +136,32 @@ export default function MapView({
         activeSearchQuery
       });
 
-      const response = await fetch(
-        `/api/cafes/viewport?` +
-        `north=${mapBounds.north}&south=${mapBounds.south}&` +
-        `east=${mapBounds.east}&west=${mapBounds.west}`
-      );
+      // Build query string with filters
+      const params = new URLSearchParams({
+        north: mapBounds.north.toString(),
+        south: mapBounds.south.toString(),
+        east: mapBounds.east.toString(),
+        west: mapBounds.west.toString(),
+      });
+
+      // Add filter parameters
+      if (searchFilters.minOverallRating > 0) params.append('minOverallRating', searchFilters.minOverallRating.toString());
+      if (searchFilters.minWifiRating > 0) params.append('minWifiRating', searchFilters.minWifiRating.toString());
+      if (searchFilters.minOutletsRating > 0) params.append('minOutletsRating', searchFilters.minOutletsRating.toString());
+      if (searchFilters.minCoffeeRating > 0) params.append('minCoffeeRating', searchFilters.minCoffeeRating.toString());
+      if (searchFilters.minVibeRating > 0) params.append('minVibeRating', searchFilters.minVibeRating.toString());
+      if (searchFilters.minSeatingRating > 0) params.append('minSeatingRating', searchFilters.minSeatingRating.toString());
+      if (searchFilters.minNoiseRating > 0) params.append('minNoiseRating', searchFilters.minNoiseRating.toString());
+      if (searchFilters.minReviews > 0) params.append('minReviews', searchFilters.minReviews.toString());
+      params.append('sortBy', searchFilters.sortBy);
+      if (searchFilters.hasWifi !== null) params.append('hasWifi', searchFilters.hasWifi.toString());
+      if (searchFilters.hasOutlets !== null) params.append('hasOutlets', searchFilters.hasOutlets.toString());
+      if (searchFilters.goodForWork !== null) params.append('goodForWork', searchFilters.goodForWork.toString());
+      if (searchFilters.quietWorkspace !== null) params.append('quietWorkspace', searchFilters.quietWorkspace.toString());
+      if (searchFilters.spacious !== null) params.append('spacious', searchFilters.spacious.toString());
+      if (searchFilters.maxPriceLevel > 0) params.append('maxPriceLevel', searchFilters.maxPriceLevel.toString());
+
+      const response = await fetch(`/api/cafes/viewport?${params.toString()}`);
 
       if (!response.ok) {
         const data = await response.json();
@@ -182,7 +220,7 @@ export default function MapView({
       setSearchError(viewportError instanceof Error ? viewportError.message : 'Failed to load cafes');
     }
   }, [viewportError]);
-
+  
   // Restore search query from localStorage (only once on mount)
   useEffect(() => {
     if (persistedState?.searchQuery) {
@@ -517,15 +555,15 @@ export default function MapView({
         map.off('moveend', handleMoveEnd); // Remove listener after firing once
 
         // After map settles, check if there are cafes nearby in the database
-        try {
-          const response = await fetch(
+    try {
+      const response = await fetch(
             `/api/cafes/viewport?` +
             `north=${userLocation.lat + 0.029}&south=${userLocation.lat - 0.029}&` + // ~2 miles
             `east=${userLocation.lng + 0.029}&west=${userLocation.lng - 0.029}`
-          );
+      );
 
           if (response.ok) {
-            const data = await response.json();
+      const data = await response.json();
             console.log('Cafes in database nearby:', data.count);
 
             if (data.count === 0) {
@@ -534,7 +572,7 @@ export default function MapView({
               setShowNoCafesModal(true);
             }
           }
-        } catch (error) {
+    } catch (error) {
           console.error('Error checking nearby cafes:', error);
         }
       };
@@ -563,7 +601,7 @@ export default function MapView({
 
     // Trigger search query by setting activeSearchQuery
     setActiveSearchQuery(query);
-    setSelectedCafeId(null);
+      setSelectedCafeId(null);
 
   }, [userLocation]);
 
