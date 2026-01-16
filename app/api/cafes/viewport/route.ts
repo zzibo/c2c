@@ -77,6 +77,28 @@ export async function GET(request: NextRequest) {
       MAX_RESULTS
     );
 
+    // Parse filter parameters (same as search API)
+    const filters = {
+      minOverallRating: searchParams.get('minOverallRating') ? parseFloat(searchParams.get('minOverallRating')!) : 0,
+      minWifiRating: searchParams.get('minWifiRating') ? parseFloat(searchParams.get('minWifiRating')!) : 0,
+      minOutletsRating: searchParams.get('minOutletsRating') ? parseFloat(searchParams.get('minOutletsRating')!) : 0,
+      minCoffeeRating: searchParams.get('minCoffeeRating') ? parseFloat(searchParams.get('minCoffeeRating')!) : 0,
+      minVibeRating: searchParams.get('minVibeRating') ? parseFloat(searchParams.get('minVibeRating')!) : 0,
+      minSeatingRating: searchParams.get('minSeatingRating') ? parseFloat(searchParams.get('minSeatingRating')!) : 0,
+      minNoiseRating: searchParams.get('minNoiseRating') ? parseFloat(searchParams.get('minNoiseRating')!) : 0,
+      minReviews: searchParams.get('minReviews') ? parseInt(searchParams.get('minReviews')!) : 0,
+      sortBy: (searchParams.get('sortBy') as any) || 'distance',
+      hasWifi: searchParams.get('hasWifi') === 'true' ? true : searchParams.get('hasWifi') === 'false' ? false : null,
+      hasOutlets: searchParams.get('hasOutlets') === 'true' ? true : searchParams.get('hasOutlets') === 'false' ? false : null,
+      goodForWork: searchParams.get('goodForWork') === 'true' ? true : searchParams.get('goodForWork') === 'false' ? false : null,
+      quietWorkspace: searchParams.get('quietWorkspace') === 'true' ? true : searchParams.get('quietWorkspace') === 'false' ? false : null,
+      spacious: searchParams.get('spacious') === 'true' ? true : searchParams.get('spacious') === 'false' ? false : null,
+      maxPriceLevel: searchParams.get('maxPriceLevel') ? parseInt(searchParams.get('maxPriceLevel')!) : -1,
+    };
+
+    // Use highest min rating from filters or min_rating param
+    const effectiveMinRating = Math.max(minRating, filters.minOverallRating);
+
     // Query database for cafes within bounding box
     const { data: dbCafes, error: dbError } = await supabaseAdmin.rpc(
       'get_cafes_in_bounds',
@@ -85,8 +107,8 @@ export async function GET(request: NextRequest) {
         south_lat: southLat,
         east_lng: eastLng,
         west_lng: westLng,
-        min_rating: minRating,
-        result_limit: limit,
+        min_rating: effectiveMinRating,
+        result_limit: limit * 2, // Fetch more to allow filtering
       }
     );
 
@@ -99,7 +121,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform database results to frontend format
-    const cafes = (dbCafes || []).map((cafe: any) => ({
+    let cafes = (dbCafes || []).map((cafe: any) => ({
       id: cafe.id,
       geoapifyPlaceId: cafe.geoapify_place_id,
       name: cafe.display_name || cafe.name,
@@ -123,7 +145,60 @@ export async function GET(request: NextRequest) {
       website: cafe.website,
       phone: cafe.phone,
       hoursText: cafe.verified_hours?.text,
+      priceLevel: undefined, // Not available from database currently
+      distance: cafe.distance_meters || 0,
     }));
+
+    // Apply filters (same logic as search API)
+    cafes = cafes.filter((cafe: any) => {
+      // Rating filters
+      if (filters.minOverallRating > 0 && cafe.ratings.overall < filters.minOverallRating) return false;
+      if (filters.minWifiRating > 0 && cafe.ratings.wifi < filters.minWifiRating) return false;
+      if (filters.minOutletsRating > 0 && cafe.ratings.outlets < filters.minOutletsRating) return false;
+      if (filters.minCoffeeRating > 0 && cafe.ratings.coffee < filters.minCoffeeRating) return false;
+      if (filters.minVibeRating > 0 && cafe.ratings.vibe < filters.minVibeRating) return false;
+      if (filters.minSeatingRating > 0 && cafe.ratings.seating < filters.minSeatingRating) return false;
+      if (filters.minNoiseRating > 0 && cafe.ratings.noise < filters.minNoiseRating) return false;
+
+      // Review count filter
+      if (filters.minReviews > 0 && cafe.totalReviews < filters.minReviews) return false;
+
+      // Feature filters
+      if (filters.hasWifi === true && cafe.ratings.wifi === 0) return false;
+      if (filters.hasOutlets === true && cafe.ratings.outlets === 0) return false;
+      if (filters.goodForWork === true) {
+        if (cafe.ratings.overall < 4 || cafe.ratings.wifi < 4) return false;
+      }
+      if (filters.quietWorkspace === true && cafe.ratings.noise < 4) return false;
+      if (filters.spacious === true && cafe.ratings.seating < 4) return false;
+
+      // Price level filter
+      if (filters.maxPriceLevel > 0 && cafe.priceLevel && cafe.priceLevel > filters.maxPriceLevel) return false;
+
+      return true;
+    });
+
+    // Sort according to sortBy
+    cafes.sort((a: any, b: any) => {
+      switch (filters.sortBy) {
+        case 'rating':
+          if (b.ratings.overall !== a.ratings.overall) {
+            return b.ratings.overall - a.ratings.overall;
+          }
+          return (a.distance || 0) - (b.distance || 0);
+        case 'reviews':
+          if (b.totalReviews !== a.totalReviews) {
+            return b.totalReviews - a.totalReviews;
+          }
+          return b.ratings.overall - a.ratings.overall;
+        case 'distance':
+        default:
+          return (a.distance || 0) - (b.distance || 0);
+      }
+    });
+
+    // Limit results
+    cafes = cafes.slice(0, limit);
 
     return NextResponse.json({
       success: true,
