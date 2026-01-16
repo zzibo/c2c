@@ -13,6 +13,7 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { useAppStore } from '@/lib/store/AppStore';
 import { loadMapState, saveMapState, clearMapState } from '@/lib/storage/mapStorage';
 import { useServiceWorker } from '@/hooks/useServiceWorker';
+import { useToast } from '@/lib/toast/ToastContext';
 
 interface MapViewProps {
   apiKey: string;
@@ -66,6 +67,7 @@ export default function MapView({
   // Use AppStore for global state management (replaces SearchContext + SidebarContext)
   const { state, setSearchQuery, setActiveSearchQuery, setPanelCollapsed, registerSearchHandler } = useAppStore();
   const { searchQuery: searchQueryContext, activeSearchQuery, isPanelCollapsed } = state;
+  const { showToast } = useToast();
 
   // Search Query - fetches cafes by name
   const {
@@ -154,7 +156,7 @@ export default function MapView({
     setCafes(displayedCafes);
   }, [displayedCafes]);
 
-  // Sync search error state
+  // Sync search error state and show toast on successful search
   useEffect(() => {
     if (searchQueryError) {
       setSearchError(searchQueryError instanceof Error ? searchQueryError.message : 'Failed to search cafes');
@@ -163,7 +165,15 @@ export default function MapView({
     } else {
       setSearchError(null);
     }
-  }, [searchQueryError, searchData, activeSearchQuery]);
+
+    // Show toast notification when search completes successfully
+    if (activeSearchQuery && searchData?.cafes && !searchQueryError) {
+      const count = searchData.cafes.length;
+      if (count > 0) {
+        showToast(`Found ${count} ${count === 1 ? 'cafe' : 'cafes'} within 10 miles`, 3000);
+      }
+    }
+  }, [searchQueryError, searchData, activeSearchQuery, showToast]);
 
   // Handle viewport errors
   useEffect(() => {
