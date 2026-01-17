@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import Map, { Marker, NavigationControl, GeolocateControl } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useQuery } from '@tanstack/react-query';
@@ -14,6 +15,8 @@ import { useAppStore } from '@/lib/store/AppStore';
 import { loadMapState, saveMapState, clearMapState } from '@/lib/storage/mapStorage';
 import { useServiceWorker } from '@/hooks/useServiceWorker';
 import { useToast } from '@/lib/toast/ToastContext';
+import { MapPin } from 'lucide-react';
+import Image from 'next/image';
 
 interface MapViewProps {
   apiKey: string;
@@ -32,6 +35,25 @@ export default function MapView({
   
   // Register service worker for map tile caching
   useServiceWorker();
+
+  // Listen for toggle add cafe mode event
+  useEffect(() => {
+    const handleToggleAddCafeMode = () => {
+      setIsAddCafeMode(prev => {
+        const newMode = !prev;
+        if (!newMode) {
+          // When exiting add mode, clear dropped pin
+          setDroppedPinLocation(null);
+        }
+        return newMode;
+      });
+    };
+
+    window.addEventListener('toggleAddCafeMode', handleToggleAddCafeMode);
+    return () => {
+      window.removeEventListener('toggleAddCafeMode', handleToggleAddCafeMode);
+    };
+  }, []);
   
   // Check for simulated location flag
   const simulateLocation = typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_SIMULATE_LOCATION : undefined;
@@ -55,6 +77,11 @@ export default function MapView({
   // Modal state for "No cafes nearby" prompt
   const [showNoCafesModal, setShowNoCafesModal] = useState(false);
   const [isSearchingGeoapify, setIsSearchingGeoapify] = useState(false);
+  const [isAddCafeMode, setIsAddCafeMode] = useState(false);
+  const [droppedPinLocation, setDroppedPinLocation] = useState<Coordinate | null>(null);
+  const [isDroppedPinHovered, setIsDroppedPinHovered] = useState(false);
+  const [droppedPinTooltipPosition, setDroppedPinTooltipPosition] = useState({ top: 0, left: 0 });
+  const droppedPinRef = useRef<HTMLDivElement>(null);
 
   // Track map viewport bounds for viewport-based loading
   const [mapBounds, setMapBounds] = useState<{
@@ -501,6 +528,35 @@ export default function MapView({
     return () => clearTimeout(timer);
   }, [isPanelCollapsed]);
 
+  // Update dropped pin tooltip position continuously while hovered
+  useEffect(() => {
+    if (!isDroppedPinHovered || !droppedPinRef.current) return;
+
+    const updatePosition = () => {
+      if (droppedPinRef.current) {
+        const rect = droppedPinRef.current.getBoundingClientRect();
+        setDroppedPinTooltipPosition({
+          top: rect.top - 10, // Position above the marker
+          left: rect.left + rect.width / 2, // Center horizontally
+        });
+      }
+    };
+
+    // Update immediately
+    updatePosition();
+
+    // Update on scroll/zoom/move
+    const interval = setInterval(updatePosition, 100);
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isDroppedPinHovered]);
+
   // Helper function: Calculate distance between two points (Haversine formula)
   const calculateDistance = useCallback((lat1: number, lng1: number, lat2: number, lng2: number): number => {
     const R = 6371e3; // Earth radius in meters
@@ -778,6 +834,15 @@ export default function MapView({
           ref={mapRef}
           {...viewState}
           onMove={evt => setViewState(evt.viewState)}
+          onClick={(evt) => {
+            // Handle map click for dropping pin in add cafe mode
+            if (isAddCafeMode) {
+              const { lng, lat } = evt.lngLat;
+              setDroppedPinLocation({ lng, lat });
+              console.log('Pin dropped at:', { lng, lat });
+            }
+          }}
+          cursor={isAddCafeMode ? 'crosshair' : 'default'}
           mapboxAccessToken={apiKey}
           mapStyle="mapbox://styles/zzibo/cmhww7iqz000r01sqbilwhha0"
           style={{ width: '100%', height: '100%' }}
@@ -846,6 +911,69 @@ export default function MapView({
               onClick={handlePinClick}
             />
           )}
+
+          {/* Dropped pin for adding new cafe */}
+          {isAddCafeMode && droppedPinLocation && (
+            <Marker
+              longitude={droppedPinLocation.lng}
+              latitude={droppedPinLocation.lat}
+              anchor="bottom"
+              style={{ zIndex: 30 }}
+            >
+              <div
+                ref={droppedPinRef}
+                className="relative group"
+                onMouseEnter={() => setIsDroppedPinHovered(true)}
+                onMouseLeave={() => setIsDroppedPinHovered(false)}
+              >
+                {/* Pin shape with coffee icon inside - matching CafeMarker style */}
+                <div className="transform transition-transform hover:scale-110 relative cursor-pointer">
+                  {/* Calculate pin size based on zoom level */}
+                  {(() => {
+                    const baseSize = 50;
+                    const zoomScale = Math.max(0.8, Math.min(1.5, viewState.zoom / 13));
+                    const pinSize = baseSize * zoomScale;
+                    const iconSize = Math.round(24 * zoomScale);
+                    const iconTop = Math.round(8 * zoomScale);
+
+                    return (
+                      <>
+                        {/* Map pin icon - styled to match cafe pin but with distinct color */}
+                        <MapPin
+                          size={pinSize}
+                          className="drop-shadow-lg text-c2c-orange"
+                          fill="#f4512c"
+                          stroke="#f4512c"
+                        />
+                        {/* Coffee icon inside the pin */}
+                        <div
+                          className="absolute left-1/2 transform -translate-x-1/2 flex items-center justify-center"
+                          style={{
+                            top: `${iconTop}px`,
+                            width: `${iconSize}px`,
+                            height: `${iconSize}px`,
+                            backgroundColor: '#f4512c',
+                            borderRadius: 0
+                          }}
+                        >
+                          <Image
+                            src="/assets/cafe-icon.webp"
+                            alt="Cafe"
+                            width={iconSize}
+                            height={iconSize}
+                            className="object-contain pixel-image"
+                            unoptimized
+                            priority
+                            fetchPriority="high"
+                          />
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            </Marker>
+          )}
         </Map>
       </div>
 
@@ -889,17 +1017,44 @@ export default function MapView({
         formatDistance={formatDistance}
       />
 
-      {/* Location status indicator */}
-      {userLocation && (
+      {/* Add Cafe Mode Indicator */}
+      {isAddCafeMode && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40
+                        bg-c2c-orange border-2 border-c2c-orange-dark
+                        px-6 py-3 shadow-lg text-sm font-sans rounded-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-3 h-3 bg-white rounded-full animate-pulse" />
+            <span className="text-white font-bold">
+              {droppedPinLocation ? 'Pin dropped! Adjust if needed.' : 'Click on the map to drop a pin'}
+            </span>
+            <button
+              onClick={() => {
+                setIsAddCafeMode(false);
+                setDroppedPinLocation(null);
+              }}
+              className="ml-2 px-2 py-1 bg-white/20 hover:bg-white/30 rounded text-white font-bold transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Location status indicator - shows dropped pin coordinates when in add mode, otherwise user location */}
+      {(isAddCafeMode && droppedPinLocation) || userLocation ? (
         <div className="absolute bottom-4 left-4 bg-c2c-orange border-2 border-c2c-orange-dark px-4 py-2 shadow-lg text-xs font-sans z-20 rounded-lg">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-white animate-pulse rounded-full" />
             <span className="text-white font-medium">
-              LOC: {userLocation.lat.toFixed(4)}, {userLocation.lng.toFixed(4)}
+              {isAddCafeMode && droppedPinLocation ? (
+                <>PIN: {droppedPinLocation.lat.toFixed(6)}, {droppedPinLocation.lng.toFixed(6)}</>
+              ) : userLocation ? (
+                <>LOC: {userLocation.lat.toFixed(4)}, {userLocation.lng.toFixed(4)}</>
+              ) : null}
             </span>
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Rating Panel */}
       {selectedCafeForRating && (
@@ -952,6 +1107,27 @@ export default function MapView({
         cancelText="No, thanks"
         confirmVariant="primary"
       />
+
+      {/* Dropped Pin Tooltip - rendered via Portal */}
+      {isDroppedPinHovered && droppedPinLocation && typeof window !== 'undefined' && createPortal(
+        <div
+          className="fixed pointer-events-none z-[10000] transition-opacity"
+          style={{
+            top: `${droppedPinTooltipPosition.top}px`,
+            left: `${droppedPinTooltipPosition.left}px`,
+            transform: 'translate(-50%, -100%)',
+            marginBottom: '8px',
+          }}
+        >
+          <div className="bg-c2c-orange border-2 border-c2c-orange-dark px-3 py-2 shadow-lg whitespace-nowrap rounded-lg">
+            <p className="text-xs font-bold text-white font-sans">Dropped Pin</p>
+            <p className="text-xs text-white/90 font-sans mt-1">
+              {droppedPinLocation.lat.toFixed(6)}, {droppedPinLocation.lng.toFixed(6)}
+            </p>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
