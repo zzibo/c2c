@@ -9,7 +9,7 @@ import { ProfileModal } from './ProfileModal';
 import { FilterModal } from '@/components/ui/FilterModal';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useAppStore } from '@/lib/store/AppStore';
-import { Filter } from 'lucide-react';
+import { Filter, Plus } from 'lucide-react';
 
 export function AppHeader() {
     const pathname = usePathname();
@@ -159,8 +159,22 @@ export function AppHeader() {
                 )}
             </AnimatePresence>
 
-            {/* Top-right auth control */}
-            <div className="fixed top-8 right-16 z-50">
+            {/* Top-right controls */}
+            <div className="fixed top-8 right-16 z-50 flex items-center gap-3">
+                {/* Add Cafe button */}
+                <button
+                    onClick={() => {
+                        // This will be handled by MapView via a callback
+                        const event = new CustomEvent('toggleAddCafeMode');
+                        window.dispatchEvent(event);
+                    }}
+                    className="w-10 h-10 rounded-full bg-c2c-orange text-white flex items-center justify-center shadow-md hover:bg-c2c-orange-dark transition-colors"
+                    title="Add a new cafe"
+                >
+                    <Plus className="h-5 w-5" />
+                </button>
+                
+                {/* Auth control */}
                 {user && profile ? (
                     <button
                         onClick={() => setShowProfileModal(true)}
