@@ -5,6 +5,9 @@
 -- added to the main cafes table. This allows for moderation and quality control.
 -- ============================================================================
 
+-- Enable PostGIS extension for geographic data
+CREATE EXTENSION IF NOT EXISTS postgis;
+
 CREATE TYPE cafe_submission_status AS ENUM ('pending', 'approved', 'rejected');
 
 CREATE TABLE user_submitted_cafes (
@@ -25,7 +28,8 @@ CREATE TABLE user_submitted_cafes (
   review_notes TEXT,
 
   -- If approved, reference to the created cafe in the main cafes table
-  approved_cafe_id UUID REFERENCES cafes(id) ON DELETE SET NULL,
+  -- Note: Foreign key constraint added separately to avoid dependency issues
+  approved_cafe_id UUID,
 
   -- Timestamps
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -43,86 +47,16 @@ CREATE TRIGGER update_user_submitted_cafes_updated_at
   BEFORE UPDATE ON user_submitted_cafes
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- ============================================================================
--- FUNCTION: Approve user-submitted cafe and create in main cafes table
--- ============================================================================
-CREATE OR REPLACE FUNCTION approve_user_submitted_cafe(
-  submission_id UUID,
-  reviewer_user_id UUID,
-  geoapify_data JSONB DEFAULT NULL
-)
-RETURNS UUID AS $$
-DECLARE
-  new_cafe_id UUID;
-  submission RECORD;
+-- Add foreign key constraint to cafes table (requires cafes table to exist)
+-- This is done separately to avoid dependency issues during migration
+DO $$
 BEGIN
-  -- Get submission details
-  SELECT * INTO submission
-  FROM user_submitted_cafes
-  WHERE id = submission_id AND status = 'pending';
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Submission not found or already processed';
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'cafes') THEN
+    ALTER TABLE user_submitted_cafes
+    ADD CONSTRAINT fk_user_submitted_cafes_approved_cafe
+    FOREIGN KEY (approved_cafe_id) REFERENCES cafes(id) ON DELETE SET NULL;
   END IF;
-
-  -- Create cafe in main cafes table
-  -- Note: geoapify_place_id will be the submission UUID if no Geoapify data
-  INSERT INTO cafes (
-    geoapify_place_id,
-    name,
-    address,
-    location,
-    website,
-    verified_name
-  ) VALUES (
-    COALESCE(geoapify_data->>'place_id', 'user_submitted_' || submission_id::text),
-    submission.name,
-    COALESCE(geoapify_data->>'address', ''),
-    submission.location,
-    submission.google_maps_link,
-    submission.name
-  )
-  RETURNING id INTO new_cafe_id;
-
-  -- Update submission status
-  UPDATE user_submitted_cafes
-  SET
-    status = 'approved',
-    approved_cafe_id = new_cafe_id,
-    reviewed_by = reviewer_user_id,
-    reviewed_at = NOW()
-  WHERE id = submission_id;
-
-  -- Refresh materialized view
-  PERFORM refresh_cafe_stats();
-
-  RETURN new_cafe_id;
-END;
-$$ LANGUAGE plpgsql;
-
--- ============================================================================
--- FUNCTION: Reject user-submitted cafe
--- ============================================================================
-CREATE OR REPLACE FUNCTION reject_user_submitted_cafe(
-  submission_id UUID,
-  reviewer_user_id UUID,
-  rejection_reason TEXT DEFAULT NULL
-)
-RETURNS void AS $$
-BEGIN
-  UPDATE user_submitted_cafes
-  SET
-    status = 'rejected',
-    reviewed_by = reviewer_user_id,
-    reviewed_at = NOW(),
-    review_notes = rejection_reason
-  WHERE id = submission_id AND status = 'pending';
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Submission not found or already processed';
-  END IF;
-END;
-$$ LANGUAGE plpgsql;
+END $$;
 
 -- ============================================================================
 -- COMMENTS (for documentation)
@@ -130,5 +64,3 @@ $$ LANGUAGE plpgsql;
 COMMENT ON TABLE user_submitted_cafes IS 'Stores cafe submissions from users pending moderation';
 COMMENT ON COLUMN user_submitted_cafes.google_maps_link IS 'Google Maps link provided by user for verification';
 COMMENT ON COLUMN user_submitted_cafes.status IS 'pending: awaiting review, approved: added to cafes table, rejected: declined';
-COMMENT ON FUNCTION approve_user_submitted_cafe IS 'Approves a submission and creates a cafe in the main cafes table';
-COMMENT ON FUNCTION reject_user_submitted_cafe IS 'Rejects a submission with optional reason';
