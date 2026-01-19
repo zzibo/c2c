@@ -11,6 +11,7 @@ import ExpandedCafeView from '@/components/cafe/ExpandedCafeView';
 import { CafeSidebar } from '@/components/map/CafeSidebar';
 import { CafeMarker } from '@/components/map/CafeMarker';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { AddCafeModal } from '@/components/cafe/AddCafeModal';
 import { useAppStore } from '@/lib/store/AppStore';
 import { loadMapState, saveMapState, clearMapState } from '@/lib/storage/mapStorage';
 import { useServiceWorker } from '@/hooks/useServiceWorker';
@@ -82,6 +83,7 @@ export default function MapView({
   const [isDroppedPinHovered, setIsDroppedPinHovered] = useState(false);
   const [droppedPinTooltipPosition, setDroppedPinTooltipPosition] = useState({ top: 0, left: 0 });
   const droppedPinRef = useRef<HTMLDivElement>(null);
+  const [showAddCafeModal, setShowAddCafeModal] = useState(false);
 
   // Track map viewport bounds for viewport-based loading
   const [mapBounds, setMapBounds] = useState<{
@@ -826,6 +828,47 @@ export default function MapView({
     return hoursText;
   };
 
+  // Handle adding a user-submitted cafe
+  const handleAddCafe = async (data: { name: string; googleMapsLink: string }) => {
+    if (!droppedPinLocation) {
+      throw new Error('No location selected');
+    }
+
+    try {
+      const response = await fetch('/api/cafes/user-submitted', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: data.name,
+          googleMapsLink: data.googleMapsLink,
+          location: droppedPinLocation,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to add cafe');
+      }
+
+      const result = await response.json();
+
+      // Show success toast
+      showToast(`Cafe "${data.name}" submitted successfully! Thanks for contributing!`, 5000);
+
+      // Exit add cafe mode and clear dropped pin
+      setIsAddCafeMode(false);
+      setDroppedPinLocation(null);
+
+      // Refresh the map to show updated cafes
+      updateMapBounds();
+    } catch (error) {
+      console.error('Error adding cafe:', error);
+      throw error;
+    }
+  };
+
   return (
     <div className="w-full h-full relative">
       {/* Map base layer */}
@@ -1040,6 +1083,20 @@ export default function MapView({
         </div>
       )}
 
+      {/* Add a cafe here button - appears when pin is dropped */}
+      {isAddCafeMode && droppedPinLocation && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-40">
+          <button
+            onClick={() => setShowAddCafeModal(true)}
+            className="bg-c2c-orange hover:bg-c2c-orange-dark text-white font-bold
+                       px-6 py-3 rounded-lg shadow-lg border-2 border-c2c-orange-dark
+                       transition-all transform hover:scale-105 font-sans text-sm"
+          >
+            Add a cafe here
+          </button>
+        </div>
+      )}
+
       {/* Location status indicator - shows dropped pin coordinates when in add mode, otherwise user location */}
       {(isAddCafeMode && droppedPinLocation) || userLocation ? (
         <div className="absolute bottom-4 left-4 bg-c2c-orange border-2 border-c2c-orange-dark px-4 py-2 shadow-lg text-xs font-sans z-20 rounded-lg">
@@ -1127,6 +1184,16 @@ export default function MapView({
           </div>
         </div>,
         document.body
+      )}
+
+      {/* Add Cafe Modal */}
+      {droppedPinLocation && (
+        <AddCafeModal
+          isOpen={showAddCafeModal}
+          onClose={() => setShowAddCafeModal(false)}
+          onSubmit={handleAddCafe}
+          location={droppedPinLocation}
+        />
       )}
     </div>
   );
