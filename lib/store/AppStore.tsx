@@ -31,6 +31,8 @@ interface AppState {
   searchQuery: string; // Current text in search input
   activeSearchQuery: string | null; // Active search triggering API call (null = viewport mode)
   searchFilters: SearchFilters; // Search filter preferences
+
+  isAddCafeMode: boolean;
 }
 
 // Action types
@@ -39,7 +41,8 @@ type AppAction =
   | { type: 'SET_SEARCH_QUERY'; payload: string }
   | { type: 'SET_ACTIVE_SEARCH_QUERY'; payload: string | null }
   | { type: 'SET_SEARCH_FILTERS'; payload: SearchFilters }
-  | { type: 'CLEAR_SEARCH' };
+  | { type: 'CLEAR_SEARCH' }
+  | { type: 'SET_ADD_CAFE_MODE'; payload: boolean };
 
 // Default filters
 const defaultFilters: SearchFilters = {
@@ -67,6 +70,7 @@ const initialState: AppState = {
   searchQuery: '',
   activeSearchQuery: null,
   searchFilters: defaultFilters,
+  isAddCafeMode: false,
 };
 
 // Reducer
@@ -87,6 +91,9 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'CLEAR_SEARCH':
       return { ...state, searchQuery: '', activeSearchQuery: null };
 
+    case 'SET_ADD_CAFE_MODE':
+      return { ...state, isAddCafeMode: action.payload };
+
     default:
       return state;
   }
@@ -102,6 +109,7 @@ interface AppContextType {
   setActiveSearchQuery: (query: string | null) => void;
   setSearchFilters: (filters: SearchFilters) => void;
   clearSearch: () => void;
+  setAddCafeMode: (isAddMode: boolean) => void;
   // Search handler registration (for component communication)
   registerSearchHandler: (handler: (query: string) => void) => void;
   onSearch: (query: string) => void;
@@ -174,6 +182,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'CLEAR_SEARCH' });
   }, []);
 
+  const setAddCafeMode = useCallback((isAddMode: boolean) => {
+    dispatch({ type: 'SET_ADD_CAFE_MODE', payload: isAddMode });
+  }, []);
+
   // Search handler registration
   const registerSearchHandler = useCallback((handler: (query: string) => void) => {
     searchHandlerRef.current = handler;
@@ -194,6 +206,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setActiveSearchQuery,
     setSearchFilters,
     clearSearch,
+    setAddCafeMode,
     registerSearchHandler,
     onSearch,
   };

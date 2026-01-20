@@ -37,25 +37,6 @@ export default function MapView({
   // Register service worker for map tile caching
   useServiceWorker();
 
-  // Listen for toggle add cafe mode event
-  useEffect(() => {
-    const handleToggleAddCafeMode = () => {
-      setIsAddCafeMode(prev => {
-        const newMode = !prev;
-        if (!newMode) {
-          // When exiting add mode, clear dropped pin
-          setDroppedPinLocation(null);
-        }
-        return newMode;
-      });
-    };
-
-    window.addEventListener('toggleAddCafeMode', handleToggleAddCafeMode);
-    return () => {
-      window.removeEventListener('toggleAddCafeMode', handleToggleAddCafeMode);
-    };
-  }, []);
-  
   // Check for simulated location flag
   const simulateLocation = typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_SIMULATE_LOCATION : undefined;
   
@@ -78,7 +59,6 @@ export default function MapView({
   // Modal state for "No cafes nearby" prompt
   const [showNoCafesModal, setShowNoCafesModal] = useState(false);
   const [isSearchingGeoapify, setIsSearchingGeoapify] = useState(false);
-  const [isAddCafeMode, setIsAddCafeMode] = useState(false);
   const [droppedPinLocation, setDroppedPinLocation] = useState<Coordinate | null>(null);
   const [isDroppedPinHovered, setIsDroppedPinHovered] = useState(false);
   const [droppedPinTooltipPosition, setDroppedPinTooltipPosition] = useState({ top: 0, left: 0 });
@@ -94,9 +74,16 @@ export default function MapView({
   } | null>(null);
 
   // Use AppStore for global state management (replaces SearchContext + SidebarContext)
-  const { state, setSearchQuery, setActiveSearchQuery, setPanelCollapsed, registerSearchHandler } = useAppStore();
-  const { searchQuery: searchQueryContext, activeSearchQuery, isPanelCollapsed, searchFilters } = state;
+  const { state, setSearchQuery, setActiveSearchQuery, setPanelCollapsed, registerSearchHandler, setAddCafeMode } = useAppStore();
+  const { searchQuery: searchQueryContext, activeSearchQuery, isPanelCollapsed, searchFilters, isAddCafeMode } = state;
   const { showToast } = useToast();
+
+  // Clear dropped pin when exiting add cafe mode
+  useEffect(() => {
+    if (!isAddCafeMode) {
+      setDroppedPinLocation(null);
+    }
+  }, [isAddCafeMode]);
 
   // Search Query - fetches cafes by name
   const {
@@ -858,7 +845,7 @@ export default function MapView({
       showToast(`Cafe "${data.name}" submitted successfully! Thanks for contributing!`, 5000);
 
       // Exit add cafe mode and clear dropped pin
-      setIsAddCafeMode(false);
+      setAddCafeMode(false);
       setDroppedPinLocation(null);
 
       // Refresh the map to show updated cafes
@@ -1074,7 +1061,7 @@ export default function MapView({
             </span>
             <button
               onClick={() => {
-                setIsAddCafeMode(false);
+                setAddCafeMode(false);
                 setDroppedPinLocation(null);
               }}
               className="ml-2 px-2 py-1 bg-white/20 hover:bg-white/30 rounded text-white font-bold transition-colors"
