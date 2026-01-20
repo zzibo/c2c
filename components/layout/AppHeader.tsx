@@ -18,8 +18,8 @@ export function AppHeader() {
     const [showAuthModal, setShowAuthModal] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [showFilterModal, setShowFilterModal] = useState(false);
-    const { state, setSearchQuery, onSearch, setPanelCollapsed, setSearchFilters } = useAppStore();
-    const { searchQuery, activeSearchQuery, isPanelCollapsed, searchFilters } = state;
+    const { state, setSearchQuery, onSearch, setPanelCollapsed, setSearchFilters, setAddCafeMode } = useAppStore();
+    const { searchQuery, activeSearchQuery, isPanelCollapsed, searchFilters, isAddCafeMode } = state;
 
     // Consider it "searching" if there's an active search query
     const isSearching = !!activeSearchQuery;
@@ -53,9 +53,9 @@ export function AppHeader() {
 
     return (
         <>
-            {/* Center pill header - Only show when sidebar is collapsed */}
+            {/* Center pill header - Only show when sidebar is collapsed and NOT in add cafe mode */}
             <AnimatePresence>
-                {isPanelCollapsed && (
+                {isPanelCollapsed && !isAddCafeMode && (
                     <motion.header
                         initial={{ opacity: 0, y: -20, scale: 0.9 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -164,14 +164,16 @@ export function AppHeader() {
                 {/* Add Cafe button */}
                 <button
                     onClick={() => {
-                        // This will be handled by MapView via a callback
-                        const event = new CustomEvent('toggleAddCafeMode');
-                        window.dispatchEvent(event);
+                        setAddCafeMode(!isAddCafeMode);
                     }}
-                    className="w-10 h-10 rounded-full bg-c2c-orange text-white flex items-center justify-center shadow-md hover:bg-c2c-orange-dark transition-colors"
-                    title="Add a new cafe"
+                    className={`w-10 h-10 rounded-full ${
+                        isAddCafeMode
+                            ? 'bg-gray-700 text-white'
+                            : 'bg-c2c-orange text-white hover:bg-c2c-orange-dark'
+                    } flex items-center justify-center shadow-md transition-colors`}
+                    title={isAddCafeMode ? 'Cancel adding cafe' : 'Add a new cafe'}
                 >
-                    <Plus className="h-5 w-5" />
+                    <Plus className={`h-5 w-5 ${isAddCafeMode ? 'rotate-45' : ''} transition-transform`} />
                 </button>
                 
                 {/* Auth control */}
