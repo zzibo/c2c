@@ -1033,32 +1033,34 @@ export default function MapView({
         </div>
       )}
 
-      {/* Left Panel overlay */}
-      <CafeSidebar
-        isCollapsed={isPanelCollapsed}
-        onToggle={handlePanelToggle}
-        cafes={cafesWithDistance}
-        isSearching={isSearchingQuery || isLoadingViewport || isSearchingGeoapify}
-        searchError={searchError}
-        searchQuery={searchQueryContext}
-        onSearchQueryChange={setSearchQuery}
-        onSearchSubmit={handleSearchSubmit}
-        onSearchClick={handleSearchClick}
-        onClearSearch={handleClearSearch}
-        isShowingSearchResults={!!activeSearchQuery}
-        onSearchAround={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (isSearchingQuery || !userLocation) return;
-          searchAroundMe();
-        }}
-        userLocation={userLocation}
-        selectedCafeId={selectedCafeId}
-        onCafeClick={handleCafeClick}
-        cafeItemRefs={cafeItemRefs}
-        panelRef={panelRef}
-        formatDistance={formatDistance}
-      />
+      {/* Left Panel overlay - hidden in add cafe mode */}
+      {!isAddCafeMode && (
+        <CafeSidebar
+          isCollapsed={isPanelCollapsed}
+          onToggle={handlePanelToggle}
+          cafes={cafesWithDistance}
+          isSearching={isSearchingQuery || isLoadingViewport || isSearchingGeoapify}
+          searchError={searchError}
+          searchQuery={searchQueryContext}
+          onSearchQueryChange={setSearchQuery}
+          onSearchSubmit={handleSearchSubmit}
+          onSearchClick={handleSearchClick}
+          onClearSearch={handleClearSearch}
+          isShowingSearchResults={!!activeSearchQuery}
+          onSearchAround={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (isSearchingQuery || !userLocation) return;
+            searchAroundMe();
+          }}
+          userLocation={userLocation}
+          selectedCafeId={selectedCafeId}
+          onCafeClick={handleCafeClick}
+          cafeItemRefs={cafeItemRefs}
+          panelRef={panelRef}
+          formatDistance={formatDistance}
+        />
+      )}
 
       {/* Add Cafe Mode Indicator */}
       {isAddCafeMode && (
