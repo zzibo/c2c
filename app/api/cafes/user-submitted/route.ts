@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabaseAdmin } from '@/lib/supabase-server';
+import { getServerSession } from '@/lib/auth-server';
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,12 +31,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // TODO: Get user_id from auth session when authentication is implemented
-    // For now, we'll use a placeholder or null
-    const userId = null; // Will be replaced with actual user ID from session
+    // Get user_id from auth session
+    const session = await getServerSession();
+    
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const userId = session.user.id;
 
     // Insert into user_submitted_cafes table
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('user_submitted_cafes')
       .insert({
         name: name.trim(),
@@ -70,6 +74,76 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error('Error in POST /api/cafes/user-submitted:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * GET /api/cafes/user-submitted
+ * Get all cafes submitted by the current user
+ */
+export async function GET(request: NextRequest) {
+  try {
+    // Get user_id from auth session
+    const session = await getServerSession();
+    
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const userId = session.user.id;
+
+    // Fetch user's submitted cafes
+    const { data, error } = await supabaseAdmin
+      .from('user_submitted_cafes')
+      .select('*')
+      .eq('submitted_by', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Supabase error:', error);
+      return NextResponse.json(
+        { error: 'Failed to fetch submissions', details: error.message },
+        { status: 500 }
+      );
+    }
+
+    // Parse location from PostGIS format
+    const submissions = (data || []).map((submission: any) => {
+      let latitude: number | null = null;
+      let longitude: number | null = null;
+      
+      if (submission.location) {
+        // Extract lat/lng from PostGIS POINT format
+        const match = submission.location.match(/POINT\(([^ ]+) ([^ ]+)\)/);
+        if (match) {
+          longitude = parseFloat(match[1]);
+          latitude = parseFloat(match[2]);
+        }
+      }
+
+      return {
+        ...submission,
+        latitude,
+        longitude,
+      };
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        submissions,
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error('Error in GET /api/cafes/user-submitted:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
