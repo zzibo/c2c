@@ -7,10 +7,17 @@ export interface ModalProps {
   onClose: () => void;
   children: React.ReactNode;
   title?: string;
+  size?: 'md' | 'lg' | 'xl';
 }
 
-export function Modal({ isOpen, onClose, children, title }: ModalProps) {
+export function Modal({ isOpen, onClose, children, title, size = 'md' }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
+
+  const sizeClasses = {
+    md: 'max-w-md',
+    lg: 'max-w-2xl',
+    xl: 'max-w-4xl',
+  };
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -47,7 +54,7 @@ export function Modal({ isOpen, onClose, children, title }: ModalProps) {
       {/* Modal */}
       <div
         ref={modalRef}
-        className="relative z-10 w-full max-w-md bg-white rounded-lg shadow-2xl border-2 border-gray-900"
+        className={`relative z-10 w-full ${sizeClasses[size]} bg-white rounded-lg shadow-2xl border-2 border-gray-900`}
         role="dialog"
         aria-modal="true"
       >
