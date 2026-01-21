@@ -203,10 +203,6 @@ export function AppHeader() {
             <ProfileModal
                 isOpen={showProfileModal}
                 onClose={() => setShowProfileModal(false)}
-                onChangeVibe={() => {
-                    setShowProfileModal(false);
-                    router.push('/onboarding?edit=true');
-                }}
                 onSignOut={signOut}
             />
 
