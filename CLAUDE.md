@@ -955,6 +955,120 @@ const handleMouseMove = (e: MouseEvent) => {
 - Only fetch if < 10 cafes in DB (MIN_RESULTS_THRESHOLD)
 - Saves API costs and improves speed
 
+### Google Maps Scraper Agent
+
+A Puppeteer-based web scraper for extracting cafe data from Google Maps URLs and storing them in the database.
+
+**Location:** `/lib/scraper/googleMapsScraper.ts`
+**API Endpoint:** `POST /api/cafes/scrape`
+
+#### Features
+- Scrapes cafe data from Google Maps place URLs
+- Extracts: name, address, location (lat/lng), phone, website, photos, hours, and ratings
+- Stores data in Supabase `cafes` table
+- Duplicate detection to avoid storing the same cafe twice
+- Headless browser automation with anti-detection measures
+
+#### Usage
+
+**Via API:**
+```bash
+curl -X POST http://localhost:3000/api/cafes/scrape \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://www.google.com/maps/place/Your+Cafe/@37.7749,-122.4194,17z/..."}'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Cafe scraped and stored successfully",
+  "cafeId": "uuid-here",
+  "cafeData": {
+    "name": "Cafe Name",
+    "address": "123 Main St",
+    "location": {"lat": 37.7749, "lng": -122.4194},
+    "phone": "+1234567890",
+    "website": "https://example.com",
+    "photos": ["url1", "url2"],
+    "hours": {"summary": "Open 7am-5pm"},
+    "rating": 4.5,
+    "totalReviews": 120
+  },
+  "duplicate": false
+}
+```
+
+**Programmatic usage:**
+```typescript
+import { scrapeGoogleMaps, isValidGoogleMapsUrl } from '@/lib/scraper/googleMapsScraper';
+
+const url = 'https://www.google.com/maps/place/...';
+if (isValidGoogleMapsUrl(url)) {
+  const cafeData = await scrapeGoogleMaps(url);
+}
+```
+
+**Test script:**
+```bash
+# Edit scripts/test-scraper.ts with your Google Maps URL
+npx ts-node scripts/test-scraper.ts
+```
+
+#### How to Get Google Maps URLs
+1. Search for a cafe on [Google Maps](https://maps.google.com)
+2. Click on the cafe to open its details
+3. Click "Share" button
+4. Copy the URL (should contain `/maps/place/`)
+
+#### Supported URL Formats
+- `https://www.google.com/maps/place/Cafe+Name/@lat,lng,...`
+- `https://maps.google.com/maps/place/...`
+- URLs with coordinates in `@lat,lng` or `!3d[lat]!4d[lng]` format
+
+#### Data Mapping
+
+| Google Maps Field | Database Column | Type |
+|-------------------|----------------|------|
+| Place name | `name` | text |
+| Formatted address | `address` | text |
+| Coordinates | `location` | geography(Point) |
+| Phone number | `phone` | text |
+| Website | `website` | text |
+| Photos | `user_photos` | text[] |
+| Opening hours | `verified_hours` | jsonb |
+
+#### Important Warnings
+
+⚠️ **Legal & Terms of Service**
+Web scraping Google Maps may violate their Terms of Service. This tool is for:
+- Educational purposes
+- Personal projects
+- Development/testing environments
+
+For production, use official APIs:
+- **Google Places API** (recommended)
+- **Geoapify API** (already integrated)
+
+⚠️ **Rate Limiting**
+- Don't scrape aggressively (space out requests)
+- Each scrape takes ~5-10 seconds
+- Not suitable for bulk scraping (use APIs instead)
+
+#### Troubleshooting
+
+**"Failed to launch browser"**
+- Ensure Chrome/Chromium installed
+- Linux: `apt-get install -y chromium-browser`
+
+**"Could not extract coordinates"**
+- Verify URL is a Google Maps place URL (not search)
+- Use "Share" button to get clean URL
+
+**"Cafe already exists"**
+- Scraper detected duplicate based on name
+- Returns existing `cafeId`
+
 ---
 
 ## Troubleshooting
