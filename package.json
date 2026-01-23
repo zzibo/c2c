@@ -8,13 +8,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed-cafes": "tsx scripts/seed-sf-cafes.ts"
+    "seed-cafes": "tsx scripts/seed-sf-cafes.ts",
+    "approve-cafes": "tsx scripts/approve-cafes.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.79.0",
     "@tanstack/react-query": "^5.90.16",
