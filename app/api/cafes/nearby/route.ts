@@ -118,8 +118,32 @@ export async function GET(request: NextRequest) {
     url.searchParams.append('limit', MAX_RESULTS.toString());
     url.searchParams.append('apiKey', apiKey);
 
-    // Fetch from Geoapify Places API
-    const response = await fetch(url.toString());
+    // Fetch from Geoapify Places API with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
+    let response: Response;
+    try {
+      response = await fetch(url.toString(), {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError' || error.code === 'ETIMEDOUT') {
+        console.error('Geoapify API request timed out');
+        return NextResponse.json(
+          { 
+            error: 'Request timeout', 
+            details: 'The Geoapify API request timed out. Please try again or check your internet connection.',
+            source: 'timeout'
+          },
+          { status: 504 } // Gateway Timeout
+        );
+      }
+      throw error; // Re-throw other errors
+    }
+    
     const data = await response.json();
 
     if (!response.ok) {
@@ -237,8 +261,24 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Error fetching cafes:', error);
+    
+    // Handle timeout errors specifically
+    if (error instanceof Error && (error.message.includes('timeout') || error.message.includes('ETIMEDOUT'))) {
+      return NextResponse.json(
+        { 
+          error: 'Request timeout', 
+          details: 'The request to Geoapify API timed out. Please try again.',
+          source: 'timeout'
+        },
+        { status: 504 }
+      );
+    }
+    
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
+      { 
+        error: 'Internal server error', 
+        details: error instanceof Error ? error.message : 'Unknown error' 
+      },
       { status: 500 }
     );
   }
