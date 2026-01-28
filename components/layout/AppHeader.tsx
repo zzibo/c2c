@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { ProfileModal } from './ProfileModal';
+import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 import { FilterModal } from '@/components/ui/FilterModal';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useAppStore } from '@/lib/store/AppStore';
@@ -23,11 +24,6 @@ export function AppHeader() {
 
     // Consider it "searching" if there's an active search query
     const isSearching = !!activeSearchQuery;
-
-    const userInitial =
-        (profile?.username && profile.username[0]?.toUpperCase()) ||
-        (user?.email && user.email[0]?.toUpperCase()) ||
-        'U';
 
     const handleSearchSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -180,10 +176,15 @@ export function AppHeader() {
                 {user && profile ? (
                     <button
                         onClick={() => setShowProfileModal(true)}
-                        className="w-10 h-10 rounded-full bg-c2c-orange text-white flex items-center justify-center text-sm font-semibold shadow-md hover:bg-c2c-orange-dark transition-colors"
+                        className="rounded-full shadow-md hover:opacity-80 transition-opacity"
                         title={`Signed in as @${profile.username}. Click to view profile options.`}
                     >
-                        {userInitial}
+                        <ProfileAvatar
+                            photoUrl={profile.profile_photo_url}
+                            username={profile.username}
+                            email={user.email}
+                            size="md"
+                        />
                     </button>
                 ) : (
                     <button

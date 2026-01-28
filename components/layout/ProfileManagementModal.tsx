@@ -5,6 +5,7 @@ import { Modal } from '@/components/auth/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { VibeSelection } from '@/components/onboarding/VibeSelection';
+import { ProfilePhotoUpload } from '@/components/profile/ProfilePhotoUpload';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { updateProfile, checkUsernameAvailability, validateUsername } from '@/lib/auth';
 import { useUpdateVibes } from '@/hooks/useUpdateVibes';
@@ -190,6 +191,15 @@ export function ProfileManagementModal({
         <div className="flex-1 overflow-y-auto">
           {activeTab === 'edit' && (
             <div className="space-y-8">
+              {/* Profile Photo Section */}
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Profile Photo</h3>
+                <ProfilePhotoUpload
+                  currentPhotoUrl={profile?.profile_photo_url || null}
+                  onPhotoUpdated={refreshProfile}
+                />
+              </div>
+
               {/* Username Section */}
               <div>
                 <h3 className="text-lg font-bold text-gray-900 mb-4">Username</h3>
