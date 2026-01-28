@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Modal } from '@/components/auth/Modal';
 import { Button } from '@/components/ui/Button';
+import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { ProfileManagementModal } from './ProfileManagementModal';
 
@@ -39,8 +40,18 @@ export function ProfileModal({
         <div className="space-y-4">
           {profile && (
             <div className="mb-6">
-              <p className="text-sm text-gray-600 mb-1">Signed in as</p>
-              <p className="text-lg font-bold text-gray-900">@{profile.username}</p>
+              <div className="flex items-center gap-4 mb-4">
+                <ProfileAvatar
+                  photoUrl={profile.profile_photo_url}
+                  username={profile.username}
+                  email={user?.email}
+                  size="xl"
+                />
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Signed in as</p>
+                  <p className="text-lg font-bold text-gray-900">@{profile.username}</p>
+                </div>
+              </div>
             </div>
           )}
 
