@@ -83,6 +83,7 @@ export type Profile = {
   id: string;
   username: string;
   is_onboarded: boolean;
+  profile_photo_url: string | null;
   metadata: ProfileMetadata;
   created_at: string;
   updated_at: string;
