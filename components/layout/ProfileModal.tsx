@@ -18,7 +18,7 @@ export function ProfileModal({
   onClose,
   onSignOut,
 }: ProfileModalProps) {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [isManagementModalOpen, setIsManagementModalOpen] = useState(false);
 
   const handleSignOut = () => {
