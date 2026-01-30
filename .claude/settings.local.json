@@ -1,6 +1,13 @@
 {
+  "permissions": {
+    "allow": [
+      "mcp__context7__resolve-library-id",
+      "WebFetch(domain:supabase.com)",
+      "Bash(npx supabase:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "supabase"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }
