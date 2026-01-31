@@ -158,22 +158,20 @@ export function AppHeader() {
             {/* Top-right controls */}
             <div className="fixed top-8 right-16 z-50 flex items-center gap-3">
                 {/* Add Cafe button */}
-                <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-700">Add a cafe now!</span>
-                    <button
-                        onClick={() => {
-                            setAddCafeMode(!isAddCafeMode);
-                        }}
-                        className={`w-10 h-10 rounded-full ${
-                            isAddCafeMode
-                                ? 'bg-gray-700 text-white'
-                                : 'bg-c2c-orange text-white hover:bg-c2c-orange-dark'
-                        } flex items-center justify-center shadow-md transition-colors`}
-                        title={isAddCafeMode ? 'Cancel adding cafe' : 'Add a new cafe'}
-                    >
-                        <Plus className={`h-5 w-5 ${isAddCafeMode ? 'rotate-45' : ''} transition-transform`} />
-                    </button>
-                </div>
+                <button
+                    onClick={() => {
+                        setAddCafeMode(!isAddCafeMode);
+                    }}
+                    className={`px-4 py-2 rounded-full ${
+                        isAddCafeMode
+                            ? 'bg-gray-700 text-white'
+                            : 'bg-c2c-orange text-white hover:bg-c2c-orange-dark'
+                    } flex items-center gap-2 shadow-md transition-colors`}
+                    title={isAddCafeMode ? 'Cancel adding cafe' : 'Add a new cafe'}
+                >
+                    <span className="text-sm font-medium">{isAddCafeMode ? 'Cancel' : 'Add a cafe now!'}</span>
+                    <Plus className={`h-5 w-5 ${isAddCafeMode ? 'rotate-45' : ''} transition-transform`} />
+                </button>
                 
                 {/* Auth control */}
                 {user && profile ? (
