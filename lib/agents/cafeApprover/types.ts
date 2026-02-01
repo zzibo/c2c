@@ -44,6 +44,7 @@ export interface ScrapedCafeData {
   hours?: Record<string, string>;
   rating?: number;
   totalReviews?: number;
+  placeType?: string; // e.g., "Coffee shop", "Cafe", "Restaurant", "Bar"
 }
 
 /**

@@ -839,16 +839,10 @@ export default function MapView({
         throw new Error(error.error || 'Failed to add cafe');
       }
 
-      const result = await response.json();
+      showToast(`Cafe "${data.name}" submitted for review. Thanks for contributing!`, 5000);
 
-      // Show success toast
-      showToast(`Cafe "${data.name}" submitted successfully! Thanks for contributing!`, 5000);
-
-      // Exit add cafe mode and clear dropped pin
       setAddCafeMode(false);
       setDroppedPinLocation(null);
-
-      // Refresh the map to show updated cafes
       updateMapBounds();
     } catch (error) {
       console.error('Error adding cafe:', error);

@@ -14,7 +14,7 @@ import {
   AgentRunSummary,
   Coordinate,
 } from './types';
-import { MAX_SUBMISSIONS_PER_RUN, DUPLICATE_CHECK_RADIUS_METERS, DUPLICATE_NAME_THRESHOLD } from './constants';
+import { MAX_SUBMISSIONS_PER_RUN, DUPLICATE_CHECK_RADIUS_METERS, DUPLICATE_NAME_THRESHOLD, HARD_REJECT_DISTANCE_METERS, HARD_REJECT_NAME_THRESHOLD } from './constants';
 import { parsePostGISPoint, classifySubmission, calculateNameSimilarity, calculateDistanceMeters } from './validation';
 import { scrapeWithRetry, isValidGoogleMapsUrl } from './scraper';
 import { evaluateWithClaude } from './claude';
@@ -55,21 +55,27 @@ function parseSubmission(submission: PendingSubmission): ParsedSubmission | null
 
 /**
  * Find existing cafe near the given location with similar name
+ * Queries the cafes table directly (not materialized view) to catch recent additions
  */
 export async function findExistingCafe(
   name: string,
   location: Coordinate
 ): Promise<ExistingCafe | null> {
-  // Query cafes within duplicate check radius
-  const { data, error } = await supabaseAdmin.rpc('get_nearby_cafes', {
-    user_lat: location.lat,
-    user_lng: location.lng,
+  // Query cafes table directly using PostGIS ST_DWithin for distance check
+  // This catches cafes that were just added (before materialized view refresh)
+  const { data, error } = await supabaseAdmin.rpc('find_duplicate_cafe', {
+    search_name: name,
+    search_lat: location.lat,
+    search_lng: location.lng,
     radius_meters: DUPLICATE_CHECK_RADIUS_METERS,
-    min_rating: 0,
-    result_limit: 20,
   });
 
   if (error) {
+    // If the RPC doesn't exist, fall back to simple name-based check
+    if (error.message.includes('find_duplicate_cafe')) {
+      console.log('  find_duplicate_cafe RPC not found, using fallback...');
+      return findExistingCafeFallback(name, location);
+    }
     console.error(`  Error checking for existing cafes: ${error.message}`);
     return null;
   }
@@ -82,6 +88,7 @@ export async function findExistingCafe(
   for (const cafe of data) {
     const similarity = calculateNameSimilarity(name, cafe.name);
     if (similarity >= DUPLICATE_NAME_THRESHOLD) {
+      console.log(`  Found duplicate: "${cafe.name}" (${similarity.toFixed(1)}% match)`);
       return {
         id: cafe.id,
         name: cafe.name,
@@ -95,12 +102,67 @@ export async function findExistingCafe(
 }
 
 /**
+ * Fallback duplicate check - queries cafes table with simple name match
+ */
+async function findExistingCafeFallback(
+  name: string,
+  location: Coordinate
+): Promise<ExistingCafe | null> {
+  // Normalize the name for searching
+  const searchTerms = name.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+
+  if (searchTerms.length === 0) {
+    return null;
+  }
+
+  // Search for cafes with similar names
+  const { data, error } = await supabaseAdmin
+    .from('cafes')
+    .select('id, name, location, address')
+    .ilike('name', `%${searchTerms[0]}%`)
+    .limit(20);
+
+  if (error) {
+    console.error(`  Fallback duplicate check error: ${error.message}`);
+    return null;
+  }
+
+  if (!data || data.length === 0) {
+    return null;
+  }
+
+  // Check each result for name similarity and distance
+  for (const cafe of data) {
+    const similarity = calculateNameSimilarity(name, cafe.name);
+    if (similarity >= DUPLICATE_NAME_THRESHOLD) {
+      // Parse cafe location and check distance
+      const cafeLocation = parsePostGISPoint(cafe.location);
+      if (cafeLocation) {
+        const distance = calculateDistanceMeters(location, cafeLocation);
+        if (distance <= DUPLICATE_CHECK_RADIUS_METERS) {
+          console.log(`  Found duplicate (fallback): "${cafe.name}" (${similarity.toFixed(1)}% match, ${distance}m away)`);
+          return {
+            id: cafe.id,
+            name: cafe.name,
+            location: cafe.location,
+            address: cafe.address,
+          };
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
  * Create a new cafe in the database from scraped data
  */
 export async function createCafe(scrapedData: ScrapedCafeData): Promise<string> {
   const { data, error } = await supabaseAdmin
     .from('cafes')
     .insert({
+      geoapify_place_id: `agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name: scrapedData.name,
       address: scrapedData.address,
       location: `POINT(${scrapedData.location.lng} ${scrapedData.location.lat})`,
@@ -196,12 +258,44 @@ export async function processSubmission(
       return result;
     }
 
-    // 4. Check for existing cafe (duplicate detection)
+    // 4. FIRST: Compare user input vs scraped data (validate user's submission)
+    const validation = classifySubmission(parsed, scrapedData);
+    result.nameMatchScore = validation.nameMatchScore;
+    result.distanceMeters = validation.distanceMeters;
+
+    console.log(`  User input: "${parsed.name}" at (${parsed.location.lat.toFixed(6)}, ${parsed.location.lng.toFixed(6)})`);
+    console.log(`  Google Maps: "${scrapedData.name}" at (${scrapedData.location.lat.toFixed(6)}, ${scrapedData.location.lng.toFixed(6)})`);
+    console.log(`  Comparison: ${validation.nameMatchScore}% name match, ${validation.distanceMeters}m apart`);
+    console.log(`  Place type: ${scrapedData.placeType || 'Unknown'}`);
+
+    // 4a. Hard reject if name doesn't match (<40% similarity)
+    if (validation.nameMatchScore < HARD_REJECT_NAME_THRESHOLD) {
+      result.action = 'rejected';
+      result.notes = `Name mismatch: You entered "${parsed.name}" but Google Maps says "${scrapedData.name}" (${validation.nameMatchScore}% match, min required: ${HARD_REJECT_NAME_THRESHOLD}%)`;
+      if (!config.dryRun) {
+        await updateSubmissionStatus(submission.id, 'rejected', result.notes);
+      }
+      result.success = true;
+      return result;
+    }
+
+    // 4b. Hard reject if location is way off (>1km)
+    if (validation.distanceMeters > HARD_REJECT_DISTANCE_METERS) {
+      result.action = 'rejected';
+      result.notes = `Location mismatch: Your pin is ${validation.distanceMeters}m away from the actual cafe (max allowed: ${HARD_REJECT_DISTANCE_METERS}m)`;
+      if (!config.dryRun) {
+        await updateSubmissionStatus(submission.id, 'rejected', result.notes);
+      }
+      result.success = true;
+      return result;
+    }
+
+    // 5. THEN: Check for existing cafe (duplicate detection) - only after user input is validated
     const existingCafe = await findExistingCafe(scrapedData.name, scrapedData.location);
     if (existingCafe) {
       result.action = 'approved';
       result.cafeId = existingCafe.id;
-      result.notes = `Linked to existing cafe: "${existingCafe.name}" (ID: ${existingCafe.id})`;
+      result.notes = `Linked to existing cafe: "${existingCafe.name}" (already in database)`;
       if (!config.dryRun) {
         await updateSubmissionStatus(submission.id, 'approved', result.notes, existingCafe.id);
       }
@@ -209,77 +303,50 @@ export async function processSubmission(
       return result;
     }
 
-    // 5. Classify submission
-    const validation = classifySubmission(parsed, scrapedData);
-    result.nameMatchScore = validation.nameMatchScore;
-    result.distanceMeters = validation.distanceMeters;
+    // 6. ALWAYS use Claude API to verify it's actually a cafe
+    // Rule-based matching is not enough - we need to verify the place type
+    console.log('  Using Claude API to verify submission...');
+    result.usedClaude = true;
 
-    console.log(`  Classification: ${validation.classification}`);
-    console.log(`  Name match: ${validation.nameMatchScore}%, Distance: ${validation.distanceMeters}m`);
+    const claudeDecision = await evaluateWithClaude(
+      { name: parsed.name, location: parsed.location },
+      { name: scrapedData.name, address: scrapedData.address, location: scrapedData.location, placeType: scrapedData.placeType },
+      validation.nameMatchScore,
+      validation.distanceMeters
+    );
 
-    // 6. Handle based on classification
-    if (validation.classification === 'clear_match') {
-      // Auto-approve
+    console.log(`  Claude decision: ${claudeDecision.approve ? 'APPROVE' : 'REJECT'}`);
+    console.log(`  Reasoning: ${claudeDecision.reasoning}`);
+
+    if (claudeDecision.approve) {
       let cafeId: string | undefined;
       if (!config.dryRun) {
         cafeId = await createCafe(scrapedData);
         await updateSubmissionStatus(
           submission.id,
           'approved',
-          `Auto-approved: ${validation.nameMatchScore}% name match, ${validation.distanceMeters}m distance`,
+          `Approved: ${claudeDecision.reasoning}`,
           cafeId
         );
+        // Immediately refresh materialized view so cafe appears on map
+        try {
+          await supabaseAdmin.rpc('refresh_cafe_stats');
+          console.log('  ✅ Refreshed cafe_stats - cafe now visible on map');
+        } catch (refreshError) {
+          console.error('  ⚠️ Failed to refresh cafe_stats:', refreshError);
+        }
       }
       result.action = 'approved';
       result.cafeId = cafeId;
-      result.notes = `Auto-approved (clear match): ${validation.nameMatchScore}% name, ${validation.distanceMeters}m`;
+      result.notes = `Approved: ${claudeDecision.reasoning}`;
       result.success = true;
-    } else if (validation.classification === 'clear_mismatch') {
-      // Flag for manual review
-      result.action = 'flagged';
-      result.notes = `Flagged (clear mismatch): ${validation.nameMatchScore}% name, ${validation.distanceMeters}m. Submission: "${parsed.name}" vs Scraped: "${scrapedData.name}"`;
+    } else {
+      result.action = 'rejected';
+      result.notes = `Rejected: ${claudeDecision.reasoning}`;
       if (!config.dryRun) {
         await updateSubmissionStatus(submission.id, 'rejected', result.notes);
       }
       result.success = true;
-    } else {
-      // Borderline - use Claude API
-      console.log('  Using Claude API for borderline decision...');
-      result.usedClaude = true;
-
-      const claudeDecision = await evaluateWithClaude(
-        { name: parsed.name, location: parsed.location },
-        { name: scrapedData.name, address: scrapedData.address, location: scrapedData.location },
-        validation.nameMatchScore,
-        validation.distanceMeters
-      );
-
-      console.log(`  Claude decision: ${claudeDecision.approve ? 'APPROVE' : 'FLAG'}`);
-      console.log(`  Reasoning: ${claudeDecision.reasoning}`);
-
-      if (claudeDecision.approve) {
-        let cafeId: string | undefined;
-        if (!config.dryRun) {
-          cafeId = await createCafe(scrapedData);
-          await updateSubmissionStatus(
-            submission.id,
-            'approved',
-            `Claude-approved: ${claudeDecision.reasoning}`,
-            cafeId
-          );
-        }
-        result.action = 'approved';
-        result.cafeId = cafeId;
-        result.notes = `Claude-approved: ${claudeDecision.reasoning}`;
-        result.success = true;
-      } else {
-        result.action = 'flagged';
-        result.notes = `Claude-flagged: ${claudeDecision.reasoning}`;
-        if (!config.dryRun) {
-          await updateSubmissionStatus(submission.id, 'rejected', result.notes);
-        }
-        result.success = true;
-      }
     }
 
     return result;

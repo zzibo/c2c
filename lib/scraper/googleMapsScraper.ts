@@ -18,6 +18,7 @@ export interface GoogleMapsCafeData {
   rating?: number;
   totalReviews?: number;
   priceLevel?: string;
+  placeType?: string; // e.g., "Coffee shop", "Cafe", "Restaurant", "Bar"
 }
 
 /**
@@ -57,6 +58,40 @@ export async function scrapeGoogleMaps(url: string): Promise<GoogleMapsCafeData>
       // Extract name
       const nameElement = document.querySelector('h1');
       data.name = nameElement?.textContent?.trim() || '';
+
+      // Extract place type (category like "Coffee shop", "Restaurant", etc.)
+      // It's usually in a button element right after the name, containing the category
+      const categoryButton = document.querySelector('button[jsaction*="category"]');
+      if (categoryButton) {
+        data.placeType = categoryButton.textContent?.trim() || '';
+      }
+
+      // Fallback: look for category in the header area near the name
+      if (!data.placeType) {
+        // The category often appears as a span/div near the h1 with specific styling
+        const headerArea = document.querySelector('div[role="main"]');
+        if (headerArea) {
+          // Look for text that matches common place types
+          const allText = headerArea.textContent || '';
+          const placeTypePatterns = [
+            'Coffee shop', 'Cafe', 'Café', 'Espresso bar', 'Coffee roasters',
+            'Restaurant', 'Seafood restaurant', 'American restaurant', 'Italian restaurant',
+            'Bar', 'Wine bar', 'Cocktail bar', 'Pub', 'Brewery',
+            'Bakery', 'Dessert shop', 'Ice cream shop',
+            'Fast food restaurant', 'Pizza restaurant', 'Sandwich shop',
+            'Breakfast restaurant', 'Brunch restaurant',
+            'Tea house', 'Bubble tea store',
+            'Grocery store', 'Supermarket', 'Convenience store',
+            'Hotel', 'Landmark', 'Park', 'Museum', 'Store'
+          ];
+          for (const pattern of placeTypePatterns) {
+            if (allText.includes(pattern)) {
+              data.placeType = pattern;
+              break;
+            }
+          }
+        }
+      }
 
       // Extract address
       const addressButton = Array.from(document.querySelectorAll('button[data-item-id^="address"]')).find(
@@ -114,16 +149,19 @@ export async function scrapeGoogleMaps(url: string): Promise<GoogleMapsCafeData>
       return data as GoogleMapsCafeData;
     });
 
-    // Extract coordinates from URL
-    const coords = extractCoordinatesFromUrl(url);
+    // Extract coordinates from the FINAL page URL (after redirects)
+    // Short URLs (maps.app.goo.gl) redirect to full URLs with coordinates
+    const finalUrl = await page.url();
+    console.log('Final URL after redirect:', finalUrl);
+
+    const coords = extractCoordinatesFromUrl(finalUrl);
     if (coords) {
       cafeData.location = coords;
     } else {
-      // Fallback: try to extract from page
-      const urlInPage = await page.url();
-      const coordsFromPage = extractCoordinatesFromUrl(urlInPage);
-      if (coordsFromPage) {
-        cafeData.location = coordsFromPage;
+      // Fallback: try original URL (in case it had coordinates)
+      const coordsFromOriginal = extractCoordinatesFromUrl(url);
+      if (coordsFromOriginal) {
+        cafeData.location = coordsFromOriginal;
       } else {
         throw new Error('Could not extract coordinates from Google Maps URL');
       }
@@ -145,24 +183,28 @@ export async function scrapeGoogleMaps(url: string): Promise<GoogleMapsCafeData>
 /**
  * Extracts latitude and longitude from Google Maps URL
  * Handles various Google Maps URL formats
+ *
+ * IMPORTANT: Priority order matters!
+ * - !3d[lat]!4d[lng] = ACTUAL place marker coordinates (preferred)
+ * - @lat,lng = Map viewport center (fallback, less accurate)
  */
 function extractCoordinatesFromUrl(url: string): { lat: number; lng: number } | null {
   try {
-    // Format 1: @lat,lng,zoom
-    const atMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-    if (atMatch) {
-      return {
-        lat: parseFloat(atMatch[1]),
-        lng: parseFloat(atMatch[2]),
-      };
-    }
-
-    // Format 2: !3d[lat]!4d[lng]
+    // Format 1 (PREFERRED): !3d[lat]!4d[lng] - actual place coordinates
     const exclamationMatch = url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
     if (exclamationMatch) {
       return {
         lat: parseFloat(exclamationMatch[1]),
         lng: parseFloat(exclamationMatch[2]),
+      };
+    }
+
+    // Format 2 (FALLBACK): @lat,lng,zoom - map center (less accurate)
+    const atMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if (atMatch) {
+      return {
+        lat: parseFloat(atMatch[1]),
+        lng: parseFloat(atMatch[2]),
       };
     }
 
@@ -183,15 +225,40 @@ function extractCoordinatesFromUrl(url: string): { lat: number; lng: number } | 
 }
 
 /**
- * Validates if a URL is a valid Google Maps place URL
+ * Validates if a URL is a valid Google Maps URL
+ *
+ * Supported formats:
+ * - Full URL: https://www.google.com/maps/place/...
+ * - Full URL: https://maps.google.com/maps/place/...
+ * - Short URL: https://maps.app.goo.gl/... (will redirect to full URL)
+ * - Short URL: https://goo.gl/maps/...
  */
 export function isValidGoogleMapsUrl(url: string): boolean {
   try {
     const urlObj = new URL(url);
-    return (
-      (urlObj.hostname.includes('google.com') || urlObj.hostname.includes('maps.google.com')) &&
-      (urlObj.pathname.includes('/maps/place/') || urlObj.pathname.includes('/maps/search/'))
-    );
+    const hostname = urlObj.hostname.toLowerCase();
+
+    // Short URL format: maps.app.goo.gl/xxx (official Google Maps share links)
+    if (hostname === 'maps.app.goo.gl') {
+      return true;
+    }
+
+    // Legacy short URL: goo.gl/maps/xxx (only allow /maps/ path for safety)
+    if (hostname === 'goo.gl' && urlObj.pathname.startsWith('/maps/')) {
+      return true;
+    }
+
+    // Full URL format: google.com/maps/place/... or maps.google.com/...
+    if (hostname.includes('google.com') || hostname.includes('maps.google.com')) {
+      return (
+        urlObj.pathname.includes('/maps/place/') ||
+        urlObj.pathname.includes('/maps/search/') ||
+        urlObj.pathname.includes('/maps?') ||
+        urlObj.search.includes('place_id')
+      );
+    }
+
+    return false;
   } catch {
     return false;
   }
