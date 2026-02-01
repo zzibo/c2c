@@ -30,15 +30,20 @@ interface BorderlineCase {
   scrapedName: string;
   scrapedAddress: string;
   scrapedLocation: Coordinate;
+  scrapedPlaceType?: string;
   nameMatchScore: number;
   distanceMeters: number;
 }
 
 /**
- * Build the prompt for Claude to evaluate a borderline submission
+ * Build the prompt for Claude to evaluate a submission
  */
 function buildPrompt(data: BorderlineCase): string {
-  return `You are a cafe verification assistant. A user submitted a cafe to our database, and we need to verify if it matches the Google Maps data.
+  const placeTypeInfo = data.scrapedPlaceType
+    ? `- **Place Type (from Google)**: "${data.scrapedPlaceType}"`
+    : '- **Place Type (from Google)**: Unknown (not detected)';
+
+  return `You are a STRICT cafe verification assistant for C2C, a cafe discovery app for remote workers. Your job is to verify if a submitted place is ACTUALLY A CAFE suitable for working.
 
 ## User Submission
 - **Name**: "${data.submissionName}"
@@ -47,24 +52,55 @@ function buildPrompt(data: BorderlineCase): string {
 ## Google Maps Data (from the link they provided)
 - **Name**: "${data.scrapedName}"
 - **Address**: "${data.scrapedAddress}"
+${placeTypeInfo}
 - **Location**: (${data.scrapedLocation.lat.toFixed(6)}, ${data.scrapedLocation.lng.toFixed(6)})
 
 ## Computed Metrics
-- **Name Similarity**: ${data.nameMatchScore.toFixed(1)}% (based on Levenshtein distance)
+- **Name Similarity**: ${data.nameMatchScore.toFixed(1)}%
 - **Distance Between Pins**: ${data.distanceMeters} meters
 
-## Context
-- Name similarity of 50-85% is considered borderline (could be abbreviation, typo, or different business)
-- Distance of 100-500m is considered borderline (could be imprecise pin drop or different location)
-- Common reasons for mismatch: user typed informal name, Google has formal name, pin dropped on wrong building
+## STRICT VERIFICATION RULES
 
-## Your Task
-Decide if this submission should be APPROVED (same cafe, minor discrepancies) or FLAGGED for manual review (likely different business or suspicious).
+### 1. Place Type Check (MOST IMPORTANT)
+The Place Type from Google Maps is the PRIMARY signal. Use it to decide:
 
+**APPROVE** only these place types:
+- "Coffee shop", "Cafe", "Café", "Espresso bar", "Coffee roasters"
+- "Bakery" (only if it's primarily a cafe-style bakery)
+- "Tea house", "Bubble tea store"
+
+**REJECT** these place types - they are NOT cafes:
+- "Restaurant", "Seafood restaurant", "American restaurant", "Italian restaurant", or ANY type of restaurant
+- "Bar", "Wine bar", "Cocktail bar", "Pub", "Brewery"
+- "Fast food restaurant", "Pizza restaurant", "Sandwich shop"
+- "Breakfast restaurant", "Brunch restaurant" (these are restaurants, not cafes)
+- "Hotel", "Landmark", "Park", "Museum", "Store", "Grocery store"
+- Anything else that isn't explicitly a coffee shop or cafe
+
+**If Place Type is "Unknown"**: Be EXTRA skeptical. Only approve if the NAME clearly indicates it's a coffee shop (e.g., contains "Coffee", "Cafe", "Espresso").
+
+### 2. Name Verification
+- The place name should indicate it's a cafe/coffee shop
+- Famous restaurant names (like "Tadich Grill") are restaurants, NOT cafes
+- Don't assume a place serves coffee just because it has seating
+
+### 3. Location Match
+- Distance under 500m is acceptable
+- Name similarity above 70% is acceptable
+
+## YOUR DECISION LOGIC
+
+1. If Place Type is a restaurant type → REJECT (restaurants are not cafes)
+2. If Place Type is bar/brewery/pub → REJECT
+3. If Place Type is coffee shop/cafe → APPROVE (if location matches)
+4. If Place Type is unknown AND name doesn't contain coffee/cafe → REJECT
+5. When in doubt → REJECT (we prefer false negatives over false positives)
+
+## OUTPUT FORMAT
 Respond in this exact JSON format:
 {
   "approve": true or false,
-  "reasoning": "Brief explanation (1-2 sentences)"
+  "reasoning": "Brief explanation mentioning the place type and why it qualifies or doesn't qualify as a cafe"
 }`;
 }
 
@@ -74,7 +110,7 @@ Respond in this exact JSON format:
  */
 export async function evaluateWithClaude(
   submission: { name: string; location: Coordinate },
-  scraped: { name: string; address: string; location: Coordinate },
+  scraped: { name: string; address: string; location: Coordinate; placeType?: string },
   nameMatchScore: number,
   distanceMeters: number
 ): Promise<ClaudeDecision> {
@@ -84,6 +120,7 @@ export async function evaluateWithClaude(
     scrapedName: scraped.name,
     scrapedAddress: scraped.address,
     scrapedLocation: scraped.location,
+    scrapedPlaceType: scraped.placeType,
     nameMatchScore,
     distanceMeters,
   };

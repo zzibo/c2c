@@ -23,7 +23,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate Google Maps link format
-    const googleMapsPattern = /^https:\/\/(www\.)?google\.[a-z]+\/maps/i;
+    // Supports: google.com/maps, maps.google.com, maps.app.goo.gl, goo.gl/maps
+    const googleMapsPattern = /^https:\/\/((www\.)?google\.[a-z]+\/maps|maps\.google\.[a-z]+|maps\.app\.goo\.gl|goo\.gl\/maps)/i;
     if (!googleMapsPattern.test(googleMapsLink)) {
       return NextResponse.json(
         { error: 'Invalid Google Maps link format' },

@@ -35,6 +35,7 @@ function convertScrapedData(data: GoogleMapsCafeData): ScrapedCafeData {
     hours: data.hours,
     rating: data.rating,
     totalReviews: data.totalReviews,
+    placeType: data.placeType,
   };
 }
 
