@@ -5,6 +5,9 @@ import { scrapeGoogleMaps, isValidGoogleMapsUrl } from '@/lib/scraper/googleMaps
 /**
  * POST /api/cafes/scrape
  * Scrapes cafe data from Google Maps URL and stores in database
+ * 
+ * Security: Requires AGENT_SECRET in Authorization header
+ * Only accessible by the cafe approver agent (server-side)
  *
  * Request body:
  * {
@@ -13,6 +16,28 @@ import { scrapeGoogleMaps, isValidGoogleMapsUrl } from '@/lib/scraper/googleMaps
  */
 export async function POST(request: NextRequest) {
   try {
+    // ========================================================================
+    // SECURITY: Verify agent secret
+    // ========================================================================
+    const authHeader = request.headers.get('Authorization');
+    const expectedAuth = `Bearer ${process.env.AGENT_SECRET || process.env.CRON_SECRET}`;
+
+    if (!process.env.AGENT_SECRET && !process.env.CRON_SECRET) {
+      console.error('[SCRAPE] AGENT_SECRET or CRON_SECRET not configured');
+      return NextResponse.json(
+        { error: 'Scrape endpoint not configured' },
+        { status: 500 }
+      );
+    }
+
+    if (authHeader !== expectedAuth) {
+      console.warn('[SCRAPE] Unauthorized scrape request attempt');
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { url } = body;
 
