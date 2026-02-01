@@ -13,6 +13,13 @@ C2C (Cafe-to-Cafe) helps users discover and rate cafes based on work-friendly cr
 - **Interactive Star Ratings**: Hover-responsive UI with half-star precision
 - **Expandable Cafe Cards**: Click to see detailed ratings with category icons
 - **Real-time Updates**: Database-backed ratings aggregation
+- **User Authentication**: Email OTP-based auth via Supabase
+- **Rating Submission**: Submit and edit ratings with optional comments and photos
+- **User Profiles**: Username, profile photo, vibe preference (lock-in, network, chill)
+- **Onboarding Flow**: Welcome flow for new users to set up profile
+- **Add New Cafes**: User-submitted cafes with AI-powered approval
+- **Photo Uploads**: Image upload to Supabase Storage for ratings and profiles
+- **Filtering**: Filter cafes by rating categories
 
 ---
 
@@ -161,16 +168,16 @@ font-mono: 'Roboto Mono'   // Code/numeric displays
 **Text Sizes & Hierarchy:**
 ```tsx
 // Headings
-<h1 className="text-2xl font-bold text-amber-900">   // Page titles
-<h2 className="text-xl font-bold text-amber-900">    // Section headers
-<h3 className="text-lg font-semibold text-amber-900"> // Subsections
+<h1 className="text-2xl font-bold text-gray-900">   // Page titles
+<h2 className="text-xl font-bold text-gray-900">    // Section headers
+<h3 className="text-lg font-semibold text-gray-900"> // Subsections
 
 // Body Text
-<p className="text-sm text-amber-800">    // Primary body
-<p className="text-xs text-amber-700">    // Secondary/helper text
+<p className="text-sm text-gray-700">    // Primary body
+<p className="text-xs text-gray-500">    // Secondary/helper text
 
 // Labels
-<label className="text-sm font-medium text-amber-900"> // Form labels
+<label className="text-sm font-medium text-gray-900"> // Form labels
 ```
 
 ### Spacing & Layout
@@ -305,9 +312,9 @@ export function Button({ variant = 'primary', className = '', ...props }: Button
 
 ```
 hooks/
-├── useOnboarding.ts    # Auth-related navigation logic
-├── useCafeSearch.ts    # (Future) Cafe search state management
-└── useGeolocation.ts   # (Future) GPS handling
+├── useOnboarding.ts     # Auth-related navigation logic
+├── useUpdateVibes.ts    # User vibe preference updates
+└── useServiceWorker.ts  # PWA service worker registration
 ```
 
 ### Hook Design Rules
@@ -636,9 +643,10 @@ Before submitting any code, verify:
 ### Frontend
 - **Framework**: Next.js 15 (App Router, React 19)
 - **Language**: TypeScript 5.3+
-- **UI**: Tailwind CSS with custom amber/beige theme
+- **UI**: Tailwind CSS with C2C brand colors
 - **Maps**: Mapbox GL JS (react-map-gl)
 - **Icons**: Custom pixel-art PNG assets for rating categories
+- **Fonts**: Roboto Mono (body), Press Start 2P (decorative)
 
 ### Backend & Database
 - **Database**: Supabase (PostgreSQL with PostGIS extension)
@@ -756,65 +764,67 @@ Before submitting any code, verify:
 - Map resizes automatically
 
 ### Color Scheme & Style
-- **Primary**: Amber/beige tones (`bg-amber-50`, `bg-amber-100`, `border-amber-900`)
-- **Text**: Dark amber (`text-amber-900`, `text-amber-800`)
-- **Buttons**: Amber-700 background with hover states
-- **Selected**: Amber-100 background, amber-700 border
+- **Primary**: C2C brand colors (`bg-c2c-base`, `bg-c2c-orange`)
+- **Text**: Gray scale (`text-gray-900`, `text-gray-700`)
+- **Buttons**: C2C orange with dark hover states
+- **Selected**: Gray-100 background, gray-700 border
 - **Style**: Pixel-art aesthetic with sharp borders (no rounded corners on assets)
-- **Font**: System font with pixel-image class for PNG assets
+- **Font**: Roboto Mono (body), Press Start 2P (decorative headings)
 
 ---
 
 ## API Routes
 
-### `GET /api/cafes/nearby?lat={lat}&lng={lng}`
-Returns cafes within 2-mile radius (3219 meters), sorted by distance.
+### Cafe Discovery
+- `GET /api/cafes/nearby?lat={lat}&lng={lng}` - Cafes within 2mi radius
+- `GET /api/cafes/search?q={query}&lat={lat}&lng={lng}` - Search by name
+- `GET /api/cafes/viewport?bounds=...` - Cafes in map viewport
+- `GET /api/cafes/user-submitted` - User-submitted cafes pending approval
 
-**Flow**:
-1. Query Supabase for existing cafes in radius
-2. If < 10 cafes in DB → Fetch from Geoapify API
-3. Store new cafes in database
-4. Refresh materialized view
-5. Return all cafes with aggregated ratings
+### Ratings
+- `POST /api/ratings` - Submit a new rating
+- `GET /api/ratings/check?cafeId={id}` - Check if user rated a cafe
+- `GET /api/cafes/[id]/ratings` - Get ratings for a cafe
+- `PUT /api/ratings/[id]` - Update a rating
+- `DELETE /api/ratings/[id]` - Delete a rating
 
-**Response**:
+### Images
+- `POST /api/images/upload` - Upload image to Supabase Storage
+- `DELETE /api/images/delete` - Delete uploaded image
+
+### Cafe Submission
+- `POST /api/cafes/scrape` - Scrape cafe data from Google Maps URL
+- `POST /api/admin/approve-submissions` - Admin approval for submissions
+
+### Background Jobs
+- `POST /api/cron/process-submissions` - Process pending cafe submissions
+
+### Example Response (nearby)
 ```json
 {
   "success": true,
   "count": 25,
   "cafes": [
     {
-      "id": "51daa8dc8eb5a90c40593829dce17e954940f00103f90105e4e90100000000c0020192031654617465277320436f666665652026204b69746368656e",
-      "name": "Fate's Coffee & Kitchen",
+      "id": "uuid",
+      "name": "Cafe Name",
       "location": { "lat": 37.7749, "lng": -122.4194 },
       "address": "123 Main St, San Francisco, CA",
-      "placeId": "...",
       "ratings": {
-        "coffee": 0,
-        "vibe": 0,
-        "wifi": 0,
-        "outlets": 0,
-        "seating": 0,
-        "noise": 0,
-        "overall": 0
+        "coffee": 4.5,
+        "vibe": 4.0,
+        "wifi": 3.5,
+        "outlets": 4.0,
+        "seating": 3.5,
+        "noise": 4.0,
+        "overall": 4.0
       },
-      "totalReviews": 0,
-      "photos": [],
-      "distance": 450,
-      "website": "https://...",
-      "phone": "+1234567890"
+      "totalReviews": 12,
+      "distance": 450
     }
-  ],
-  "searchCenter": { "lat": 37.7749, "lng": -122.4194 },
-  "radiusMeters": 3219,
-  "radiusMiles": 2,
-  "source": "database", // or "geoapify+database"
-  "cacheHit": true
+  ]
 }
 ```
-
-### `GET /api/cafes/search?q={query}&lat={lat}&lng={lng}`
-Search cafes by name within radius.
 
 ---
 
@@ -822,31 +832,59 @@ Search cafes by name within radius.
 
 ### Key Components
 
-**`components/map/MapView.tsx`**
-- Main map interface
-- Manages cafe list state, selected cafe, expanded cafe
-- Handles geolocation, search, cafe clicks
-- Renders Mapbox map + markers
-- Left panel with cafe cards
+**Map & Cafe Discovery**
+- `components/map/MapView.tsx` - Main map interface, cafe list state, geolocation
+- `components/map/CafeSidebar.tsx` - Left panel with cafe list and search
+- `components/map/CafeMarker.tsx` - Map marker component
+- `components/cafe/ExpandedCafeView.tsx` - Detailed cafe view with ratings
+- `components/cafe/RatingPanel.tsx` - Rating submission form
+- `components/cafe/AddCafeModal.tsx` - User cafe submission form
 
-**`components/ui/StarRating.tsx`** ⭐
-- Reusable interactive star rating component
-- Props:
-  - `rating` (0-5): Current rating value
-  - `maxStars` (default 5): Number of stars
-  - `size` (pixels): Star image size
-  - `interactive` (boolean): Enable hover/click
-  - `onChange` (callback): Rating change handler
-  - `showNumber` (boolean): Display numerical rating
-- Features:
-  - Precise mouse tracking for half-star detection
-  - Hover preview vs. actual rating
-  - Click to set rating
-  - Accessible with keyboard support (future)
+**UI Components**
+- `components/ui/StarRating.tsx` - Interactive star rating (half-star precision)
+- `components/ui/ImageUpload.tsx` - Photo upload with preview
+- `components/ui/ImageCarousel.tsx` - Photo gallery viewer
+- `components/ui/FilterModal.tsx` - Cafe filtering options
+- `components/ui/Button.tsx` - Styled button variants
+- `components/ui/Input.tsx` - Form input component
+- `components/ui/Toast.tsx` - Notification toasts
+- `components/ui/ConfirmModal.tsx` - Confirmation dialogs
 
-**`lib/supabase.ts`**
-- Supabase client configuration
+**Authentication**
+- `components/auth/AuthModal.tsx` - Login/signup modal
+- `components/auth/EmailStep.tsx` - Email input step
+- `components/auth/OTPStep.tsx` - OTP verification step
+- `components/auth/WelcomeBackHandler.tsx` - Returning user handler
+
+**Profile & Layout**
+- `components/layout/AppHeader.tsx` - Main app header
+- `components/layout/ProfileModal.tsx` - User profile dropdown
+- `components/layout/ProfileManagementModal.tsx` - Edit profile settings
+- `components/profile/ProfileAvatar.tsx` - User avatar display
+- `components/profile/ProfilePhotoUpload.tsx` - Profile photo upload
+
+**Onboarding**
+- `components/onboarding/UsernameStep.tsx` - Username selection
+- `components/onboarding/VibeSelection.tsx` - Vibe preference picker
+- `components/onboarding/VibeCard.tsx` - Individual vibe option card
+
+### Library & Services
+
+**`lib/supabase.ts`** / **`lib/supabase-client.ts`** / **`lib/supabase-server.ts`**
+- Supabase client configuration (browser and server)
 - TypeScript types for database tables
+
+**`lib/auth.ts`** / **`lib/auth-server.ts`**
+- Authentication context and utilities
+
+**`lib/storage/`**
+- `imageStorage.ts` - Rating image uploads
+- `profilePhotos.ts` - Profile photo uploads
+- `mapStorage.ts` - Map position persistence
+
+**`lib/agents/cafeApprover/`**
+- AI-powered cafe submission approval agent
+- Uses Claude API for validation
 
 **`types/cafe.ts`**
 - Core TypeScript interfaces:
@@ -869,12 +907,7 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJ...
 
 ---
 
-## Development Tools & Workflow
-
-### AI Tools in Use
-- **Claude Code**: Architecture decisions, debugging, code reviews, complex refactoring
-- **Cursor IDE**: Day-to-day coding with AI pair programming (Cmd+K for inline generation)
-- **v0.dev**: Rapid UI component prototyping (used for initial designs)
+## Development Workflow
 
 ### Development Commands
 ```bash
@@ -891,31 +924,51 @@ npm run lint         # ESLint check
 
 ---
 
-## Future Features (Roadmap)
+## Completed Features
 
-### Phase 1: Rating Submission
+### Phase 1: Core MVP (Done)
+- Interactive map with cafe discovery
+- 6-category rating system
+- Location-based search + name search
+- Cafe cards with expandable details
+
+### Phase 2: Rating Submission (Done)
 - API endpoint: `POST /api/ratings`
 - Form validation (overall rating required, others optional)
 - Photo upload to Supabase Storage
-- Optimistic UI updates
+- Edit and delete ratings
 
-### Phase 2: User Authentication
-- Supabase Auth (Google OAuth, Email)
+### Phase 3: User Authentication (Done)
+- Supabase Auth with email OTP
 - Protected routes for rating submission
-- User profile page
-- Onboarding flow (select vibe preference)
+- User profile with photo upload
+- Onboarding flow (username + vibe preference)
 
-### Phase 3: Social Features
+### Phase 4: Cafe Submission (Done)
+- User-submitted cafe form
+- AI-powered approval agent (Claude)
+- Admin approval workflow
+- Cron job for processing submissions
+
+---
+
+## Future Features (Roadmap)
+
+### Phase 5: Social Features
 - View user's rating history
 - Follow other users
 - Cafe favorites/bookmarks
 - Activity feed
 
-### Phase 4: AI-Powered Recommendations
+### Phase 6: AI-Powered Recommendations
 - Natural language search: "quiet cafe with good wifi"
 - Personalized recommendations based on vibe preference
 - Semantic search using embeddings
-- Auto-suggest review text
+
+### Phase 7: Mobile & PWA
+- Progressive Web App with offline support
+- Push notifications for new ratings
+- Mobile-optimized experience
 
 ---
 
@@ -1038,39 +1091,6 @@ npx ts-node scripts/test-scraper.ts
 | Photos | `user_photos` | text[] |
 | Opening hours | `verified_hours` | jsonb |
 
-#### Important Warnings
-
-⚠️ **Legal & Terms of Service**
-Web scraping Google Maps may violate their Terms of Service. This tool is for:
-- Educational purposes
-- Personal projects
-- Development/testing environments
-
-For production, use official APIs:
-- **Google Places API** (recommended)
-- **Geoapify API** (already integrated)
-
-⚠️ **Rate Limiting**
-- Don't scrape aggressively (space out requests)
-- Each scrape takes ~5-10 seconds
-- Not suitable for bulk scraping (use APIs instead)
-
-#### Troubleshooting
-
-**"Failed to launch browser"**
-- Ensure Chrome/Chromium installed
-- Linux: `apt-get install -y chromium-browser`
-
-**"Could not extract coordinates"**
-- Verify URL is a Google Maps place URL (not search)
-- Use "Share" button to get clean URL
-
-**"Cafe already exists"**
-- Scraper detected duplicate based on name
-- Returns existing `cafeId`
-
----
-
 ## Troubleshooting
 
 ### Common Issues
@@ -1101,7 +1121,7 @@ For production, use official APIs:
 
 ## Contact & Contribution
 
-For questions or suggestions, open an issue on GitHub or contact the development team.
+Contributions welcome! See README.md for how to get started.
 
 **Tech Stack Summary**: Next.js 15 + TypeScript + Supabase + Mapbox + Tailwind CSS
-**Status**: Active development (MVP complete, adding rating submission next)
+**Status**: Active development (core features complete, working on social features)
