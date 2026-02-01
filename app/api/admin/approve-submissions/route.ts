@@ -1,3 +1,8 @@
+// COMMENTED OUT: This endpoint is not currently used
+// The cron job uses /api/cron/process-submissions instead
+// Uncomment and add authentication if you need manual admin access
+
+/*
 import { NextRequest, NextResponse } from 'next/server';
 import { runCafeApproverAgent, fetchPendingSubmissions } from '@/lib/agents/cafeApprover';
 
@@ -135,4 +140,22 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+*/
+
+// Return 404 for now since endpoint is disabled
+import { NextRequest, NextResponse } from 'next/server';
+
+export async function POST(request: NextRequest) {
+  return NextResponse.json(
+    { error: 'Endpoint disabled. Use /api/cron/process-submissions instead.' },
+    { status: 404 }
+  );
+}
+
+export async function GET(request: NextRequest) {
+  return NextResponse.json(
+    { error: 'Endpoint disabled. Use /api/cron/process-submissions instead.' },
+    { status: 404 }
+  );
 }
