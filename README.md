@@ -1,175 +1,154 @@
-# C2C (Cafe to Code) - Web Application
+# C2C - Cafe to Code
 
-> Discover the best cafes for coding and remote work
+Find the best cafes for remote work and coding sessions.
 
-## Quick Start
+## What is C2C?
 
-### 1. Get Your Mapbox API Token
+C2C helps remote workers and coffee enthusiasts discover cafes optimized for productivity. Search by location, rate cafes across 6 work-friendly categories, and find your next favorite spot.
 
-1. Go to [Mapbox Account](https://account.mapbox.com/)
-2. Sign up for a free account (Free tier includes 50,000 map loads/month)
-3. Navigate to **Access Tokens**
-4. Copy your **Default public token** OR create a new one
+## Features
 
-### 2. Set Up Environment Variables
+- **Map-based discovery** - Find cafes near you with an interactive Mapbox map
+- **6-category ratings** - Rate Coffee, Vibe, WiFi, Outlets, Seating, and Noise
+- **User authentication** - Sign up with email (OTP-based)
+- **Submit new cafes** - Add cafes that aren't in the database
+- **Photo uploads** - Share photos of your favorite spots
+- **Personalized vibes** - Choose your work style: Lock-in, Network, or Chill
+- **Filter & search** - Find exactly what you're looking for
 
+## Tech Stack
+
+- **Frontend:** Next.js 15, React 19, TypeScript, Tailwind CSS
+- **Maps:** Mapbox GL JS
+- **Backend:** Supabase (PostgreSQL + PostGIS + Auth)
+- **Hosting:** Vercel
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- npm or yarn
+- Mapbox account (free tier)
+- Supabase project
+
+### Setup
+
+1. Clone the repo:
 ```bash
-# Copy the example file
-cp .env.local.example .env.local
-
-# Open .env.local and add your Mapbox token
-# NEXT_PUBLIC_MAPBOX_TOKEN=pk.eyJ1...your_token_here
+git clone https://github.com/yourusername/c2c.git
+cd c2c
 ```
 
-Edit `.env.local`:
-```env
-NEXT_PUBLIC_MAPBOX_TOKEN=pk.eyJ1IjoieW91ciB1c2VybmFtZSIsImEiOiJ5b3VyX3Rva2VuIn0...
-```
-
-### 3. Install Dependencies & Run
-
+2. Install dependencies:
 ```bash
-# Install all packages
 npm install
+```
 
-# Start the development server
+3. Copy environment variables:
+```bash
+cp .env.local.example .env.local
+```
+
+4. Add your keys to `.env.local`:
+```env
+NEXT_PUBLIC_MAPBOX_TOKEN=pk.eyJ1...
+NEXT_PUBLIC_SUPABASE_URL=https://....supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJ...
+GEOAPIFY_API_KEY=...
+```
+
+5. Run the dev server:
+```bash
 npm run dev
 ```
 
-### 4. Open Your Browser
-
-Navigate to: **http://localhost:3000**
-
-You should see:
-- A full-screen map
-- Your current location (browser will ask for permission)
-- A blue pulsing marker showing where you are
-- Navigation controls to zoom in/out
-
----
+6. Open http://localhost:3000
 
 ## Project Structure
 
 ```
-c2c-1/
-├── app/
-│   ├── globals.css          # Global styles + Tailwind
-│   ├── layout.tsx            # Root layout
-│   └── page.tsx              # Home page with map
+c2c/
+├── app/                    # Next.js App Router pages
+│   ├── api/               # API routes
+│   └── onboarding/        # User onboarding flow
 ├── components/
-│   └── map/
-│       └── MapView.tsx       # Map component with user location
-├── types/
-│   └── cafe.ts               # TypeScript interfaces
-├── lib/                      # Utilities (coming soon)
-├── hooks/                    # Custom React hooks (coming soon)
-├── .env.local.example        # Environment variables template
-└── README.md                 # This file
+│   ├── ui/                # Reusable UI components
+│   ├── map/               # Map and cafe list
+│   ├── auth/              # Authentication
+│   ├── cafe/              # Cafe cards and ratings
+│   └── profile/           # User profile
+├── lib/                   # Utilities and services
+│   ├── auth/              # Auth context
+│   ├── storage/           # Image storage helpers
+│   └── agents/            # Background processing
+├── hooks/                 # Custom React hooks
+├── types/                 # TypeScript interfaces
+└── public/assets/         # Pixel art icons
 ```
 
----
+## Contributing
 
-## Features Implemented ✅
+We welcome contributions! Here's how to get involved:
 
-- [x] Next.js 15 with App Router
-- [x] TypeScript strict mode
-- [x] Tailwind CSS
-- [x] Mapbox GL JS integration
-- [x] User location detection
-- [x] Responsive map interface
-- [x] Loading states
-- [x] Dark mode support
+### Good First Issues
 
----
+Check out issues labeled `good first issue` for beginner-friendly tasks.
 
-## Next Steps (Phase 2)
+### How to Contribute
 
-### Add Sample Cafe Markers
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Make your changes
+4. Run linting: `npm run lint`
+5. Commit with a descriptive message
+6. Push and open a Pull Request
 
-1. Create sample cafe data
-2. Display cafe markers on map
-3. Click cafe to see details
-4. Calculate distance from user
+### Areas We Need Help
 
-### Set Up Firebase
+- **UI/UX improvements** - Better mobile experience, accessibility
+- **New features** - Favorites, cafe check-ins, social features
+- **Testing** - Unit tests, E2E tests
+- **Documentation** - API docs, component storybook
+- **Bug fixes** - Check the Issues tab
 
-1. Create Firebase project
-2. Add Firestore database
-3. Set up authentication
-4. Connect to app
+### Code Style
 
-### Build Cafe Search
-
-1. Google Places API integration
-2. Search bar component
-3. Filter by distance/rating
-4. List view + map view toggle
-
----
-
-## Tech Stack
-
-- **Framework**: Next.js 15 (React 19)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **Maps**: Mapbox GL JS
-- **State**: React hooks (Zustand coming soon)
-- **Backend**: Firebase (coming soon)
-
----
-
-## Common Issues
-
-### Map not loading?
-
-1. Check your `.env.local` file exists
-2. Verify your Mapbox token is correct
-3. Restart dev server: `npm run dev`
-4. Clear browser cache
-
-### Location not showing?
-
-1. Browser will ask for location permission - allow it
-2. Check if you're on HTTPS or localhost
-3. Try clicking the geolocate button (top right of map)
-
-### TypeScript errors?
-
-```bash
-# Delete cache and reinstall
-rm -rf .next node_modules
-npm install
-npm run dev
-```
-
----
+- TypeScript strict mode
+- Tailwind CSS for styling (see design system in CLAUDE.md)
+- Functional components with hooks
+- Clear component interfaces
 
 ## Scripts
 
 ```bash
-npm run dev      # Start development server with Turbopack
-npm run build    # Build for production
-npm run start    # Start production server
+npm run dev      # Start dev server
+npm run build    # Production build
 npm run lint     # Run ESLint
+npm run start    # Start production server
 ```
 
----
+## Troubleshooting
 
-## Learning Resources
+**Map not loading?**
+- Check `.env.local` exists with valid Mapbox token
+- Restart dev server after env changes
 
-- [Next.js Documentation](https://nextjs.org/docs)
-- [Mapbox GL JS Docs](https://docs.mapbox.com/mapbox-gl-js/)
-- [React Map GL](https://visgl.github.io/react-map-gl/)
-- [Tailwind CSS](https://tailwindcss.com/docs)
+**Location not working?**
+- Allow location permissions in browser
+- Must be on HTTPS or localhost
 
----
+**Auth issues?**
+- Verify Supabase URL and keys
+- Check Supabase dashboard for auth logs
 
 ## License
 
 MIT
 
----
+## Links
 
-## What's Next?
-
-Check out `TECHNICAL_ROADMAP.md` for the complete development plan!
+- [Report a Bug](https://github.com/zzibo/c2c/issues)
+- [Request a Feature](https://github.com/zzibo/c2c/issues)
+- [Technical Documentation](./CLAUDE.md)
