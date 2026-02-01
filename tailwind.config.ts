@@ -29,6 +29,20 @@ const config: Config = {
         '3': '3px',
         '4': '4px',
       },
+      keyframes: {
+        'slide-in-right': {
+          from: { transform: 'translateX(100%)' },
+          to: { transform: 'translateX(0)' },
+        },
+        'slide-out-right': {
+          from: { transform: 'translateX(0)' },
+          to: { transform: 'translateX(100%)' },
+        },
+      },
+      animation: {
+        'slide-in-right': 'slide-in-right 300ms ease-out',
+        'slide-out-right': 'slide-out-right 300ms ease-out',
+      },
     },
   },
   plugins: [],

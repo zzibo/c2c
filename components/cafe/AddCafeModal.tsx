@@ -35,9 +35,10 @@ export function AddCafeModal({ isOpen, onClose, onSubmit, location }: AddCafeMod
     }
 
     // Validate Google Maps link format
-    const googleMapsPattern = /^https:\/\/(www\.)?google\.[a-z]+\/maps/i;
+    // Supports: google.com/maps, maps.google.com, maps.app.goo.gl, goo.gl/maps
+    const googleMapsPattern = /^https:\/\/((www\.)?google\.[a-z]+\/maps|maps\.google\.[a-z]+|maps\.app\.goo\.gl|goo\.gl\/maps)/i;
     if (!googleMapsPattern.test(googleMapsLink)) {
-      setError('Please enter a valid Google Maps link (e.g., https://maps.google.com/...)');
+      setError('Please enter a valid Google Maps link (e.g., https://maps.app.goo.gl/... or https://google.com/maps/...)');
       return;
     }
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
-import { X, Edit2, Expand } from 'lucide-react';
+import { X, Edit2, Expand, Trash2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Cafe, RatingWithUser } from '@/types/cafe';
 import StarRating from '@/components/ui/StarRating';
@@ -10,6 +10,7 @@ import { AuthModal } from '@/components/auth/AuthModal';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { ImageUpload } from '@/components/ui/ImageUpload';
 import { ImageCarousel } from '@/components/ui/ImageCarousel';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 
 interface RatingPanelProps {
   cafe: Cafe;
@@ -41,6 +42,7 @@ export default function RatingPanel({
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -253,6 +255,91 @@ export default function RatingPanel({
     },
   });
 
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (ratingId: string) => {
+      const response = await fetch(`/api/ratings/${ratingId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete rating');
+      }
+
+      return response.json();
+    },
+    onMutate: async () => {
+      // Cancel outgoing queries
+      await queryClient.cancelQueries({ queryKey: ['cafe-ratings', cafe.id] });
+      await queryClient.cancelQueries({ queryKey: ['user-rating', cafe.id, user?.id] });
+
+      // Snapshot previous values
+      const previousRatings = queryClient.getQueryData(['cafe-ratings', cafe.id]);
+      const previousUserRating = queryClient.getQueryData(['user-rating', cafe.id, user?.id]);
+
+      // Optimistically remove user rating
+      queryClient.setQueryData(['user-rating', cafe.id, user?.id], {
+        hasRated: false,
+        rating: null,
+      });
+
+      // Remove from ratings list
+      queryClient.setQueryData(['cafe-ratings', cafe.id], (old: { ratings: RatingWithUser[]; total_count: number } | undefined) => {
+        if (!old) return { ratings: [], total_count: 0 };
+        return {
+          ...old,
+          ratings: old.ratings.filter((r: RatingWithUser) => r.id !== userRating?.id),
+          total_count: Math.max(0, old.total_count - 1),
+        };
+      });
+
+      return { previousRatings, previousUserRating };
+    },
+    onError: (err, variables, context) => {
+      // Rollback on error
+      if (context) {
+        queryClient.setQueryData(['cafe-ratings', cafe.id], context.previousRatings);
+        queryClient.setQueryData(['user-rating', cafe.id, user?.id], context.previousUserRating);
+      }
+      setError(err instanceof Error ? err.message : 'Failed to delete rating');
+    },
+    onSuccess: () => {
+      // Invalidate queries to refetch fresh data
+      queryClient.invalidateQueries({ queryKey: ['cafe-ratings', cafe.id] });
+      queryClient.invalidateQueries({ queryKey: ['user-rating', cafe.id, user?.id] });
+
+      setSuccessMessage('Rating deleted!');
+      setIsEditing(false);
+      setError(null);
+
+      // Reset form
+      setFormData({
+        coffee_rating: null,
+        vibe_rating: null,
+        wifi_rating: null,
+        outlets_rating: null,
+        seating_rating: null,
+        noise_rating: null,
+        comment: '',
+        photos: [],
+      });
+
+      // Notify parent
+      onRatingSubmitted();
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(null), 3000);
+    },
+  });
+
+  // Handle delete
+  const handleDelete = () => {
+    if (userRating?.id) {
+      deleteMutation.mutate(userRating.id);
+    }
+  };
+
   // Calculate overall rating from form data
   const calculateOverallRating = (data: typeof formData) => {
     const ratings = [
@@ -333,8 +420,7 @@ export default function RatingPanel({
     <>
       {/* Panel */}
       <div
-        className="fixed right-0 top-0 h-full w-[400px] bg-c2c-base border-l-2 border-c2c-orange shadow-xl z-[100] overflow-y-auto"
-        style={{ animation: 'slideInRight 300ms ease-out' }}
+        className="fixed right-0 top-0 h-full w-[400px] bg-c2c-base border-l-2 border-c2c-orange shadow-xl z-[100] overflow-y-auto animate-slide-in-right"
       >
         {/* Header */}
         <div className="sticky top-0 bg-c2c-base border-b-2 border-c2c-orange z-10">
@@ -444,6 +530,13 @@ export default function RatingPanel({
                           aria-label="Edit rating"
                         >
                           <Edit2 size={14} className="text-gray-900" />
+                        </button>
+                        <button
+                          onClick={() => setShowDeleteModal(true)}
+                          className="p-1 hover:bg-red-100 rounded transition-colors"
+                          aria-label="Delete rating"
+                        >
+                          <Trash2 size={14} className="text-red-600" />
                         </button>
                       </div>
                     </div>
@@ -768,17 +861,17 @@ export default function RatingPanel({
         onClose={() => setShowLoginModal(false)}
       />
 
-      {/* Add CSS animation */}
-      <style jsx>{`
-        @keyframes slideInRight {
-          from {
-            transform: translateX(100%);
-          }
-          to {
-            transform: translateX(0);
-          }
-        }
-      `}</style>
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDelete}
+        title="Delete Rating"
+        message="Are you sure you want to delete your rating? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmVariant="danger"
+      />
     </>
   );
 }
