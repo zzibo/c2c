@@ -2,20 +2,14 @@
 // The cron job uses /api/cron/process-submissions instead
 // Uncomment and add authentication if you need manual admin access
 
+// All code below is commented out - uncomment if needed
 /*
 import { NextRequest, NextResponse } from 'next/server';
 import { runCafeApproverAgent, fetchPendingSubmissions } from '@/lib/agents/cafeApprover';
 
-/**
- * POST /api/admin/approve-submissions
- * Trigger the cafe approver agent to process pending submissions
- *
- * Body:
- * - dryRun: boolean (optional) - If true, don't make DB changes
- * - limit: number (optional) - Max submissions to process
- *
- * NOTE: In production, add authentication/authorization to this endpoint
- */
+// POST /api/admin/approve-submissions
+// Trigger the cafe approver agent to process pending submissions
+// Body: { dryRun?: boolean, limit?: number }
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
@@ -63,21 +57,15 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * GET /api/admin/approve-submissions
- * List pending submissions for dashboard review
- *
- * Query params:
- * - limit: number (optional) - Max submissions to return (default: 50)
- * - status: string (optional) - Filter by status (pending, approved, rejected)
- */
+// GET /api/admin/approve-submissions
+// List pending submissions for dashboard review
+// Query params: limit (number), status (pending|approved|rejected)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '50', 10);
     const status = searchParams.get('status') || 'pending';
 
-    // Validate status
     const validStatuses = ['pending', 'approved', 'rejected'];
     if (!validStatuses.includes(status)) {
       return NextResponse.json(
@@ -86,7 +74,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // For pending, use the agent's fetch function
     if (status === 'pending') {
       const submissions = await fetchPendingSubmissions(limit);
       return NextResponse.json({
@@ -103,7 +90,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // For other statuses, fetch directly
     const { supabaseAdmin } = await import('@/lib/supabase-server');
     const { data, error } = await supabaseAdmin
       .from('user_submitted_cafes')
