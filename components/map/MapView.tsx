@@ -15,6 +15,7 @@ import { AddCafeModal } from '@/components/cafe/AddCafeModal';
 import { useAppStore } from '@/lib/store/AppStore';
 import { loadMapState, saveMapState, clearMapState } from '@/lib/storage/mapStorage';
 import { useServiceWorker } from '@/hooks/useServiceWorker';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { useToast } from '@/lib/toast/ToastContext';
 import { MapPin } from 'lucide-react';
 import Image from 'next/image';
@@ -36,6 +37,7 @@ export default function MapView({
   
   // Register service worker for map tile caching
   useServiceWorker();
+  const isMobile = useIsMobile();
 
   // Check for simulated location flag
   const simulateLocation = typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_SIMULATE_LOCATION : undefined;
@@ -753,10 +755,13 @@ export default function MapView({
     setSelectedCafeForRating(cafe);
     setShowRatingPanel(true);
 
+    // Calculate a latitude offset to account for bottom sheet covering ~35% of screen
+    const latOffset = isMobile ? -0.003 : 0;
+
     // Center map on cafe
     setViewState({
       longitude: cafe.location.lng,
-      latitude: cafe.location.lat,
+      latitude: cafe.location.lat + latOffset,
       zoom: Math.max(viewState.zoom, 15)
     });
 
@@ -777,10 +782,13 @@ export default function MapView({
     setSelectedCafeForRating(cafe);
     setShowRatingPanel(true);
 
+    // Calculate a latitude offset to account for bottom sheet covering ~35% of screen
+    const latOffset = isMobile ? -0.003 : 0;
+
     // Center map on pin
     setViewState({
       longitude: cafe.location.lng,
-      latitude: cafe.location.lat,
+      latitude: cafe.location.lat + latOffset,
       zoom: Math.max(viewState.zoom, 15)
     });
 
@@ -1040,6 +1048,7 @@ export default function MapView({
           cafeItemRefs={cafeItemRefs}
           panelRef={panelRef}
           formatDistance={formatDistance}
+          isRatingPanelOpen={showRatingPanel}
         />
       )}
 
