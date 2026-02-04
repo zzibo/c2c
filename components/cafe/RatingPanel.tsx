@@ -11,6 +11,8 @@ import { useAuth } from '@/lib/auth/AuthContext';
 import { ImageUpload } from '@/components/ui/ImageUpload';
 import { ImageCarousel } from '@/components/ui/ImageCarousel';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { useIsMobile } from '@/hooks/useIsMobile';
+import { BottomSheet } from '@/components/map/BottomSheet';
 
 interface RatingPanelProps {
   cafe: Cafe;
@@ -45,6 +47,7 @@ export default function RatingPanel({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
 
   const [formData, setFormData] = useState<RatingFormData>({
     coffee_rating: null,
@@ -136,15 +139,10 @@ export default function RatingPanel({
 
   // Handle image changes
   const handleImagesChange = (images: string[]) => {
-    console.log('📷 RatingPanel received images:', images);
-    setFormData((prev) => {
-      const newState = {
-        ...prev,
-        photos: images,
-      };
-      console.log('📝 Updated formData.photos:', newState.photos);
-      return newState;
-    });
+    setFormData((prev) => ({
+      ...prev,
+      photos: images,
+    }));
   };
 
   // Validate form
@@ -409,149 +407,393 @@ export default function RatingPanel({
     return `${Math.floor(diffDays / 365)} years ago`;
   };
 
-  if (!isOpen) {
-    console.log('RatingPanel: isOpen is false, not rendering');
-    return null;
-  }
+  if (!isOpen) return null;
 
-  console.log('RatingPanel: Rendering for cafe:', cafe.name);
-
-  return (
+  // Shared header content: photo carousel + cafe info
+  const headerContent = (
     <>
-      {/* Panel */}
-      <div
-        className="fixed right-0 top-0 h-full w-[400px] bg-c2c-base border-l-2 border-c2c-orange shadow-xl z-[100] overflow-y-auto animate-slide-in-right"
-      >
-        {/* Header */}
-        <div className="sticky top-0 bg-c2c-base border-b-2 border-c2c-orange z-10">
-          {/* Photo Carousel Section - 15% */}
-          <div className="h-[15vh] flex items-center justify-center bg-gray-50 border-b-2 border-c2c-orange relative">
-            <ImageCarousel
-              images={allPhotos}
-              fallbackImage="/assets/c2c-icon.webp"
-              className="w-full h-full"
-            />
-            {/* Expand and Close buttons */}
-            <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
-              {onExpand && (
-                <button
-                  onClick={onExpand}
-                  className="p-2 bg-white/80 hover:bg-white rounded transition-colors shadow-sm"
-                  aria-label="Expand view"
-                >
-                  <Expand size={20} className="text-c2c-orange" />
-                </button>
-              )}
+      {/* Photo Carousel Section - smaller on mobile */}
+      <div className="h-[10vh] md:h-[15vh] flex items-center justify-center bg-gray-50 border-b-2 border-c2c-orange relative">
+        <ImageCarousel
+          images={allPhotos}
+          fallbackImage="/assets/c2c-icon.webp"
+          className="w-full h-full"
+        />
+        {/* Expand and Close buttons */}
+        <div className="absolute top-2 right-2 md:top-4 md:right-4 flex items-center gap-2 z-10">
+          {onExpand && (
+            <button
+              onClick={onExpand}
+              className="p-2 bg-white/80 hover:bg-white rounded transition-colors shadow-sm min-w-[44px] min-h-[44px] flex items-center justify-center"
+              aria-label="Expand view"
+            >
+              <Expand size={20} className="text-c2c-orange" />
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="p-2 bg-white/80 hover:bg-white rounded transition-colors shadow-sm min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label="Close panel"
+          >
+            <X size={20} className="text-c2c-orange" />
+          </button>
+        </div>
+      </div>
+
+      {/* Cafe Info */}
+      <div className="p-4 bg-c2c-base">
+        <h2 className="text-lg font-bold text-c2c-orange mb-1">{cafe.name}</h2>
+        {cafe.address && (
+          <p className="text-xs text-c2c-orange mb-2">{cafe.address}</p>
+        )}
+        <div className="flex items-center gap-2">
+          <StarRating
+            rating={cafe.ratings.overall}
+            size={16}
+            showNumber={true}
+          />
+          {cafe.totalReviews > 0 && (
+            <span className="text-xs text-c2c-orange">
+              ({cafe.totalReviews} {cafe.totalReviews === 1 ? 'review' : 'reviews'})
+            </span>
+          )}
+        </div>
+      </div>
+    </>
+  );
+
+  // Shared scrollable content: rating form + reviews
+  const scrollableContent = (
+    <div className="p-4">
+      {isLoading ? (
+        <div className="text-center py-8 text-gray-700">
+          <div className="animate-spin h-8 w-8 border-2 border-c2c-orange border-t-transparent rounded-full mx-auto mb-2"></div>
+          <p className="text-sm">Loading ratings...</p>
+        </div>
+      ) : (
+        <>
+          {/* Success Message */}
+          {successMessage && (
+            <div className="mb-4 bg-green-100 text-green-800 px-4 py-2 rounded border border-green-300 text-sm">
+              {successMessage}
+            </div>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-4 bg-red-100 text-red-800 px-4 py-2 rounded border border-red-300 text-sm">
+              {error}
+            </div>
+          )}
+
+          {/* Authentication Warning */}
+          {!user && (
+            <div className="mb-4 bg-c2c-orange/10 text-c2c-orange px-4 py-3 rounded border border-c2c-orange/30">
+              <p className="text-sm mb-2">Please sign in to rate this cafe</p>
               <button
-                onClick={onClose}
-                className="p-2 bg-white/80 hover:bg-white rounded transition-colors shadow-sm"
-                aria-label="Close panel"
+                onClick={() => setShowLoginModal(true)}
+                className="w-full bg-c2c-orange hover:bg-c2c-orange-dark text-white px-4 py-2 rounded transition-all text-sm font-medium"
               >
-                <X size={20} className="text-c2c-orange" />
+                Sign In
               </button>
             </div>
-          </div>
+          )}
 
-          {/* Cafe Info */}
-          <div className="p-4 bg-c2c-base">
-            <h2 className="text-lg font-bold text-c2c-orange mb-1">{cafe.name}</h2>
-            {cafe.address && (
-              <p className="text-xs text-c2c-orange mb-2">{cafe.address}</p>
-            )}
-            <div className="flex items-center gap-2">
-              <StarRating
-                rating={cafe.ratings.overall}
-                size={16}
-                showNumber={true}
-              />
-              {cafe.totalReviews > 0 && (
-                <span className="text-xs text-c2c-orange">
-                  ({cafe.totalReviews} {cafe.totalReviews === 1 ? 'review' : 'reviews'})
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
+          {/* YOUR RATING SECTION */}
+          <div className="mb-6">
+            <h3 className="text-sm font-bold text-c2c-orange mb-3 uppercase">
+              Your Rating
+            </h3>
 
-        {/* Content */}
-        <div className="p-4">
-          {isLoading ? (
-            <div className="text-center py-8 text-gray-700">
-              <div className="animate-spin h-8 w-8 border-2 border-c2c-orange border-t-transparent rounded-full mx-auto mb-2"></div>
-              <p className="text-sm">Loading ratings...</p>
-            </div>
-          ) : (
-            <>
-              {/* Success Message */}
-              {successMessage && (
-                <div className="mb-4 bg-green-100 text-green-800 px-4 py-2 rounded border border-green-300 text-sm">
-                  {successMessage}
+            {userRating && !isEditing ? (
+              // Show existing rating (read-only)
+              <div className="bg-gray-50 border-2 border-gray-400 rounded p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-900">
+                    You rated this cafe{' '}
+                    <span className="font-bold">{userRating.overall_rating.toFixed(1)}★</span>
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleEdit}
+                      className="p-1 hover:bg-gray-200 rounded transition-colors"
+                      aria-label="Edit rating"
+                    >
+                      <Edit2 size={14} className="text-gray-900" />
+                    </button>
+                    <button
+                      onClick={() => setShowDeleteModal(true)}
+                      className="p-1 hover:bg-red-100 rounded transition-colors"
+                      aria-label="Delete rating"
+                    >
+                      <Trash2 size={14} className="text-red-600" />
+                    </button>
+                  </div>
                 </div>
-              )}
-
-              {/* Error Message */}
-              {error && (
-                <div className="mb-4 bg-red-100 text-red-800 px-4 py-2 rounded border border-red-300 text-sm">
-                  {error}
-                </div>
-              )}
-
-              {/* Authentication Warning */}
-              {!user && (
-                <div className="mb-4 bg-c2c-orange/10 text-c2c-orange px-4 py-3 rounded border border-c2c-orange/30">
-                  <p className="text-sm mb-2">Please sign in to rate this cafe</p>
-                  <button
-                    onClick={() => setShowLoginModal(true)}
-                    className="w-full bg-c2c-orange hover:bg-c2c-orange-dark text-white px-4 py-2 rounded transition-all text-sm font-medium"
-                  >
-                    Sign In
-                  </button>
-                </div>
-              )}
-
-              {/* YOUR RATING SECTION */}
-              <div className="mb-6">
-                <h3 className="text-sm font-bold text-c2c-orange mb-3 uppercase">
-                  Your Rating
-                </h3>
-
-                {userRating && !isEditing ? (
-                  // Show existing rating (read-only)
-                  <div className="bg-gray-50 border-2 border-gray-400 rounded p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-gray-900">
-                        You rated this cafe{' '}
-                        <span className="font-bold">{userRating.overall_rating.toFixed(1)}★</span>
-                      </span>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={handleEdit}
-                          className="p-1 hover:bg-gray-200 rounded transition-colors"
-                          aria-label="Edit rating"
-                        >
-                          <Edit2 size={14} className="text-gray-900" />
-                        </button>
-                        <button
-                          onClick={() => setShowDeleteModal(true)}
-                          className="p-1 hover:bg-red-100 rounded transition-colors"
-                          aria-label="Delete rating"
-                        >
-                          <Trash2 size={14} className="text-red-600" />
-                        </button>
+                <p className="text-xs text-gray-700">
+                  {formatDate(userRating.updated_at)}
+                </p>
+                {userRating.comment && (
+                  <p className="text-sm text-gray-900 mt-2 italic">
+                    &ldquo;{userRating.comment}&rdquo;
+                  </p>
+                )}
+                {userRating.photos && userRating.photos.length > 0 && (
+                  <div className="mt-2 grid grid-cols-2 gap-1">
+                    {userRating.photos.map((url: string, idx: number) => (
+                      <div key={idx} className="aspect-square rounded overflow-hidden border border-gray-300">
+                        <Image
+                          src={url}
+                          alt={`Photo ${idx + 1}`}
+                          width={150}
+                          height={150}
+                          className="w-full h-full object-cover"
+                          unoptimized
+                        />
                       </div>
-                    </div>
-                    <p className="text-xs text-gray-700">
-                      {formatDate(userRating.updated_at)}
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Show rating form
+              <div className="space-y-3">
+                {/* Coffee */}
+                <div className="flex items-center gap-2 min-h-[44px]">
+                  <img
+                    src="/assets/coffee.webp"
+                    alt="Coffee"
+                    width={30}
+                    height={30}
+                    className="object-contain pixel-image flex-shrink-0"
+                    loading="eager"
+                    decoding="async"
+                  />
+                  <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Coffee</span>
+                  <StarRating
+                    rating={formData.coffee_rating || 0}
+                    size={20}
+                    interactive={!!user}
+                    onChange={(rating) => handleRatingChange('coffee_rating', rating)}
+                    showNumber={true}
+                  />
+                </div>
+
+                {/* Vibe */}
+                <div className="flex items-center gap-2 min-h-[44px]">
+                  <img
+                    src="/assets/vibes.webp"
+                    alt="Vibe"
+                    width={30}
+                    height={30}
+                    className="object-contain pixel-image flex-shrink-0"
+                    loading="eager"
+                    decoding="async"
+                  />
+                  <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Vibe</span>
+                  <StarRating
+                    rating={formData.vibe_rating || 0}
+                    size={20}
+                    interactive={!!user}
+                    onChange={(rating) => handleRatingChange('vibe_rating', rating)}
+                    showNumber={true}
+                  />
+                </div>
+
+                {/* WiFi */}
+                <div className="flex items-center gap-2 min-h-[44px]">
+                  <img
+                    src="/assets/wifi.webp"
+                    alt="WiFi"
+                    width={30}
+                    height={30}
+                    className="object-contain pixel-image flex-shrink-0"
+                    loading="eager"
+                    decoding="async"
+                  />
+                  <span className="text-xs text-c2c-orange w-16 flex-shrink-0">WiFi</span>
+                  <StarRating
+                    rating={formData.wifi_rating || 0}
+                    size={20}
+                    interactive={!!user}
+                    onChange={(rating) => handleRatingChange('wifi_rating', rating)}
+                    showNumber={true}
+                  />
+                </div>
+
+                {/* Outlets */}
+                <div className="flex items-center gap-2 min-h-[44px]">
+                  <img
+                    src="/assets/plugs.webp"
+                    alt="Outlets"
+                    width={30}
+                    height={30}
+                    className="object-contain pixel-image flex-shrink-0"
+                    loading="eager"
+                    decoding="async"
+                  />
+                  <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Outlets</span>
+                  <StarRating
+                    rating={formData.outlets_rating || 0}
+                    size={20}
+                    interactive={!!user}
+                    onChange={(rating) => handleRatingChange('outlets_rating', rating)}
+                    showNumber={true}
+                  />
+                </div>
+
+                {/* Seating */}
+                <div className="flex items-center gap-2 min-h-[44px]">
+                  <img
+                    src="/assets/seats.webp"
+                    alt="Seating"
+                    width={30}
+                    height={30}
+                    className="object-contain pixel-image flex-shrink-0"
+                    loading="eager"
+                    decoding="async"
+                  />
+                  <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Seating</span>
+                  <StarRating
+                    rating={formData.seating_rating || 0}
+                    size={20}
+                    interactive={!!user}
+                    onChange={(rating) => handleRatingChange('seating_rating', rating)}
+                    showNumber={true}
+                  />
+                </div>
+
+                {/* Noise */}
+                <div className="flex items-center gap-2 min-h-[44px]">
+                  <img
+                    src="/assets/noise.webp"
+                    alt="Noise"
+                    width={30}
+                    height={30}
+                    className="object-contain pixel-image flex-shrink-0"
+                    loading="eager"
+                    decoding="async"
+                  />
+                  <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Noise</span>
+                  <StarRating
+                    rating={formData.noise_rating || 0}
+                    size={20}
+                    interactive={!!user}
+                    onChange={(rating) => handleRatingChange('noise_rating', rating)}
+                    showNumber={true}
+                  />
+                </div>
+
+                {/* Comment */}
+                <div className="mt-3">
+                  <label className="text-xs text-c2c-orange block mb-1">
+                    Comment (optional)
+                  </label>
+                  <textarea
+                    value={formData.comment}
+                    onChange={handleCommentChange}
+                    disabled={!user}
+                    placeholder="Share your experience..."
+                    className="w-full px-3 py-2 text-sm bg-white border border-c2c-orange rounded focus:outline-none focus:ring-2 focus:ring-c2c-orange text-c2c-orange placeholder-c2c-orange/60 disabled:opacity-50 disabled:cursor-not-allowed"
+                    rows={3}
+                    maxLength={500}
+                  />
+                  <p className="text-xs text-c2c-orange mt-1">
+                    {formData.comment.length}/500 characters
+                  </p>
+                </div>
+
+                {/* Photo Upload */}
+                <div className="mt-3">
+                  <label className="text-xs text-c2c-orange block mb-1">
+                    Photo (optional)
+                  </label>
+                  <ImageUpload
+                    cafeId={cafe.id}
+                    ratingId={userRating?.id}
+                    existingImages={formData.photos || []}
+                    onImagesChange={handleImagesChange}
+                    maxImages={1}
+                    disabled={!user}
+                  />
+                  {/* Debug: Show current photos state */}
+                  {formData.photos && formData.photos.length > 0 && (
+                    <p className="text-xs text-green-600 mt-1">
+                      {formData.photos.length} photo(s) ready to submit
                     </p>
-                    {userRating.comment && (
-                      <p className="text-sm text-gray-900 mt-2 italic">
-                        "{userRating.comment}"
-                      </p>
+                  )}
+                </div>
+
+                {/* Submit Buttons */}
+                <div className="flex flex-col md:flex-row gap-2 mt-4">
+                  <button
+                    onClick={handleSubmit}
+                    disabled={!user || submitMutation.isPending}
+                    className="flex-1 bg-c2c-orange hover:bg-c2c-orange-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-all text-sm font-medium min-h-[44px]"
+                  >
+                    {submitMutation.isPending
+                      ? 'Submitting...'
+                      : userRating
+                      ? 'Update Rating'
+                      : 'Submit Rating'}
+                  </button>
+                  {isEditing && (
+                    <button
+                      onClick={handleCancelEdit}
+                      className="px-4 py-2 bg-c2c-base hover:bg-c2c-base/70 text-c2c-orange border border-c2c-orange rounded transition-all text-sm font-medium min-h-[44px]"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ALL REVIEWS SECTION */}
+          <div className="border-t-2 border-c2c-orange/40 pt-4">
+            <h3 className="text-sm font-bold text-c2c-orange mb-3 uppercase">
+              All Reviews ({allRatings.length})
+            </h3>
+
+            {allRatings.length === 0 ? (
+              <div className="text-center py-8 text-c2c-orange">
+                <p className="text-sm">No reviews yet.</p>
+                <p className="text-xs mt-1">Be the first to rate this cafe!</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {allRatings.map((rating: RatingWithUser) => (
+                  <div
+                    key={rating.id}
+                    className="bg-white border border-c2c-orange/40 rounded p-3"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-semibold text-c2c-orange">
+                          {rating.username}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <StarRating rating={rating.overall_rating} size={12} />
+                          <span className="text-xs text-c2c-orange">
+                            {rating.overall_rating.toFixed(1)}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-xs text-c2c-orange">
+                        {formatDate(rating.created_at)}
+                      </span>
+                    </div>
+
+                    {rating.comment && (
+                      <p className="text-sm text-c2c-orange mt-2">{rating.comment}</p>
                     )}
-                    {userRating.photos && userRating.photos.length > 0 && (
+
+                    {/* Show photos if any exist */}
+                    {rating.photos && rating.photos.length > 0 && (
                       <div className="mt-2 grid grid-cols-2 gap-1">
-                        {userRating.photos.map((url: string, idx: number) => (
-                          <div key={idx} className="aspect-square rounded overflow-hidden border border-gray-300">
+                        {rating.photos.map((url: string, idx: number) => (
+                          <div key={idx} className="aspect-square rounded overflow-hidden border border-c2c-orange/40">
                             <Image
                               src={url}
                               alt={`Photo ${idx + 1}`}
@@ -564,297 +806,48 @@ export default function RatingPanel({
                         ))}
                       </div>
                     )}
-                  </div>
-                ) : (
-                  // Show rating form
-                  <div className="space-y-3">
-                    {/* Coffee */}
-                    <div className="flex items-center gap-2">
-                      <img
-                        src="/assets/coffee.webp"
-                        alt="Coffee"
-                        width={30}
-                        height={30}
-                        className="object-contain pixel-image flex-shrink-0"
-                        loading="eager"
-                        decoding="async"
-                      />
-                      <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Coffee</span>
-                      <StarRating
-                        rating={formData.coffee_rating || 0}
-                        size={20}
-                        interactive={!!user}
-                        onChange={(rating) => handleRatingChange('coffee_rating', rating)}
-                        showNumber={true}
-                      />
-                    </div>
 
-                    {/* Vibe */}
-                    <div className="flex items-center gap-2">
-                      <img
-                        src="/assets/vibes.webp"
-                        alt="Vibe"
-                        width={30}
-                        height={30}
-                        className="object-contain pixel-image flex-shrink-0"
-                        loading="eager"
-                        decoding="async"
-                      />
-                      <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Vibe</span>
-                      <StarRating
-                        rating={formData.vibe_rating || 0}
-                        size={20}
-                        interactive={!!user}
-                        onChange={(rating) => handleRatingChange('vibe_rating', rating)}
-                        showNumber={true}
-                      />
-                    </div>
-
-                    {/* WiFi */}
-                    <div className="flex items-center gap-2">
-                      <img
-                        src="/assets/wifi.webp"
-                        alt="WiFi"
-                        width={30}
-                        height={30}
-                        className="object-contain pixel-image flex-shrink-0"
-                        loading="eager"
-                        decoding="async"
-                      />
-                      <span className="text-xs text-c2c-orange w-16 flex-shrink-0">WiFi</span>
-                      <StarRating
-                        rating={formData.wifi_rating || 0}
-                        size={20}
-                        interactive={!!user}
-                        onChange={(rating) => handleRatingChange('wifi_rating', rating)}
-                        showNumber={true}
-                      />
-                    </div>
-
-                    {/* Outlets */}
-                    <div className="flex items-center gap-2">
-                      <img
-                        src="/assets/plugs.webp"
-                        alt="Outlets"
-                        width={30}
-                        height={30}
-                        className="object-contain pixel-image flex-shrink-0"
-                        loading="eager"
-                        decoding="async"
-                      />
-                      <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Outlets</span>
-                      <StarRating
-                        rating={formData.outlets_rating || 0}
-                        size={20}
-                        interactive={!!user}
-                        onChange={(rating) => handleRatingChange('outlets_rating', rating)}
-                        showNumber={true}
-                      />
-                    </div>
-
-                    {/* Seating */}
-                    <div className="flex items-center gap-2">
-                      <img
-                        src="/assets/seats.webp"
-                        alt="Seating"
-                        width={30}
-                        height={30}
-                        className="object-contain pixel-image flex-shrink-0"
-                        loading="eager"
-                        decoding="async"
-                      />
-                      <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Seating</span>
-                      <StarRating
-                        rating={formData.seating_rating || 0}
-                        size={20}
-                        interactive={!!user}
-                        onChange={(rating) => handleRatingChange('seating_rating', rating)}
-                        showNumber={true}
-                      />
-                    </div>
-
-                    {/* Noise */}
-                    <div className="flex items-center gap-2">
-                      <img
-                        src="/assets/noise.webp"
-                        alt="Noise"
-                        width={30}
-                        height={30}
-                        className="object-contain pixel-image flex-shrink-0"
-                        loading="eager"
-                        decoding="async"
-                      />
-                      <span className="text-xs text-c2c-orange w-16 flex-shrink-0">Noise</span>
-                      <StarRating
-                        rating={formData.noise_rating || 0}
-                        size={20}
-                        interactive={!!user}
-                        onChange={(rating) => handleRatingChange('noise_rating', rating)}
-                        showNumber={true}
-                      />
-                    </div>
-
-                    {/* Comment */}
-                    <div className="mt-3">
-                      <label className="text-xs text-c2c-orange block mb-1">
-                        Comment (optional)
-                      </label>
-                      <textarea
-                        value={formData.comment}
-                        onChange={handleCommentChange}
-                        disabled={!user}
-                        placeholder="Share your experience..."
-                        className="w-full px-3 py-2 text-sm bg-white border border-c2c-orange rounded focus:outline-none focus:ring-2 focus:ring-c2c-orange text-c2c-orange placeholder-c2c-orange/60 disabled:opacity-50 disabled:cursor-not-allowed"
-                        rows={3}
-                        maxLength={500}
-                      />
-                      <p className="text-xs text-c2c-orange mt-1">
-                        {formData.comment.length}/500 characters
-                      </p>
-                    </div>
-
-                    {/* Photo Upload */}
-                    <div className="mt-3">
-                      <label className="text-xs text-c2c-orange block mb-1">
-                        Photo (optional)
-                      </label>
-                      <ImageUpload
-                        cafeId={cafe.id}
-                        ratingId={userRating?.id}
-                        existingImages={formData.photos || []}
-                        onImagesChange={handleImagesChange}
-                        maxImages={1}
-                        disabled={!user}
-                      />
-                      {/* Debug: Show current photos state */}
-                      {formData.photos && formData.photos.length > 0 && (
-                        <p className="text-xs text-green-600 mt-1">
-                          ✓ {formData.photos.length} photo(s) ready to submit
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Submit Buttons */}
-                    <div className="flex gap-2 mt-4">
-                      <button
-                        onClick={handleSubmit}
-                        disabled={!user || submitMutation.isPending}
-                        className="flex-1 bg-c2c-orange hover:bg-c2c-orange-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-all text-sm font-medium"
-                      >
-                        {submitMutation.isPending
-                          ? 'Submitting...'
-                          : userRating
-                          ? 'Update Rating'
-                          : 'Submit Rating'}
-                      </button>
-                      {isEditing && (
-                        <button
-                          onClick={handleCancelEdit}
-                          className="px-4 py-2 bg-c2c-base hover:bg-c2c-base/70 text-c2c-orange border border-c2c-orange rounded transition-all text-sm font-medium"
-                        >
-                          Cancel
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* ALL REVIEWS SECTION */}
-              <div className="border-t-2 border-c2c-orange/40 pt-4">
-                <h3 className="text-sm font-bold text-c2c-orange mb-3 uppercase">
-                  All Reviews ({allRatings.length})
-                </h3>
-
-                {allRatings.length === 0 ? (
-                  <div className="text-center py-8 text-c2c-orange">
-                    <p className="text-sm">No reviews yet.</p>
-                    <p className="text-xs mt-1">Be the first to rate this cafe!</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {allRatings.map((rating: RatingWithUser) => (
-                      <div
-                        key={rating.id}
-                        className="bg-white border border-c2c-orange/40 rounded p-3"
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <p className="text-sm font-semibold text-c2c-orange">
-                              {rating.username}
-                            </p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <StarRating rating={rating.overall_rating} size={12} />
-                              <span className="text-xs text-c2c-orange">
-                                {rating.overall_rating.toFixed(1)}
-                              </span>
-                            </div>
-                          </div>
-                          <span className="text-xs text-c2c-orange">
-                            {formatDate(rating.created_at)}
-                          </span>
-                        </div>
-
-                        {rating.comment && (
-                          <p className="text-sm text-c2c-orange mt-2">{rating.comment}</p>
+                    {/* Show category ratings if any exist */}
+                    {(rating.coffee_rating ||
+                      rating.vibe_rating ||
+                      rating.wifi_rating ||
+                      rating.outlets_rating ||
+                      rating.seating_rating ||
+                      rating.noise_rating) && (
+                      <div className="mt-2 pt-2 border-t border-c2c-orange/20 text-xs text-c2c-orange space-y-1">
+                        {rating.coffee_rating && (
+                          <div>Coffee: {rating.coffee_rating.toFixed(1)}</div>
                         )}
-
-                        {/* Show photos if any exist */}
-                        {rating.photos && rating.photos.length > 0 && (
-                          <div className="mt-2 grid grid-cols-2 gap-1">
-                            {rating.photos.map((url: string, idx: number) => (
-                              <div key={idx} className="aspect-square rounded overflow-hidden border border-c2c-orange/40">
-                                <Image
-                                  src={url}
-                                  alt={`Photo ${idx + 1}`}
-                                  width={150}
-                                  height={150}
-                                  className="w-full h-full object-cover"
-                                  unoptimized
-                                />
-                              </div>
-                            ))}
-                          </div>
+                        {rating.vibe_rating && (
+                          <div>Vibe: {rating.vibe_rating.toFixed(1)}</div>
                         )}
-
-                        {/* Show category ratings if any exist */}
-                        {(rating.coffee_rating ||
-                          rating.vibe_rating ||
-                          rating.wifi_rating ||
-                          rating.outlets_rating ||
-                          rating.seating_rating ||
-                          rating.noise_rating) && (
-                          <div className="mt-2 pt-2 border-t border-c2c-orange/20 text-xs text-c2c-orange space-y-1">
-                            {rating.coffee_rating && (
-                              <div>☕ Coffee: {rating.coffee_rating.toFixed(1)}</div>
-                            )}
-                            {rating.vibe_rating && (
-                              <div>🎵 Vibe: {rating.vibe_rating.toFixed(1)}</div>
-                            )}
-                            {rating.wifi_rating && (
-                              <div>📶 WiFi: {rating.wifi_rating.toFixed(1)}</div>
-                            )}
-                            {rating.outlets_rating && (
-                              <div>🔌 Outlets: {rating.outlets_rating.toFixed(1)}</div>
-                            )}
-                            {rating.seating_rating && (
-                              <div>💺 Seating: {rating.seating_rating.toFixed(1)}</div>
-                            )}
-                            {rating.noise_rating && (
-                              <div>🔊 Noise: {rating.noise_rating.toFixed(1)}</div>
-                            )}
-                          </div>
+                        {rating.wifi_rating && (
+                          <div>WiFi: {rating.wifi_rating.toFixed(1)}</div>
+                        )}
+                        {rating.outlets_rating && (
+                          <div>Outlets: {rating.outlets_rating.toFixed(1)}</div>
+                        )}
+                        {rating.seating_rating && (
+                          <div>Seating: {rating.seating_rating.toFixed(1)}</div>
+                        )}
+                        {rating.noise_rating && (
+                          <div>Noise: {rating.noise_rating.toFixed(1)}</div>
                         )}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
+                ))}
               </div>
-            </>
-          )}
-        </div>
-      </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
 
+  // Modals (shared between mobile and desktop)
+  const modals = (
+    <>
       {/* Login Modal */}
       <AuthModal
         isOpen={showLoginModal}
@@ -872,6 +865,45 @@ export default function RatingPanel({
         cancelText="Cancel"
         confirmVariant="danger"
       />
+    </>
+  );
+
+  // Mobile: render inside bottom sheet (higher z-index than CafeSidebar's z-50)
+  if (isMobile) {
+    return (
+      <>
+        <BottomSheet snapPoints={[50, 90]} defaultSnap={1} className="z-[60]">
+          {/* Header: photo + cafe info (always visible) */}
+          <div className="shrink-0">
+            {headerContent}
+          </div>
+
+          {/* Scrollable content handled by BottomSheet's scroll container */}
+          {scrollableContent}
+        </BottomSheet>
+
+        {modals}
+      </>
+    );
+  }
+
+  // Desktop/Tablet: existing fixed sidebar behavior
+  return (
+    <>
+      {/* Panel */}
+      <div
+        className="fixed inset-0 md:inset-auto md:right-0 md:top-0 md:h-full md:w-[400px] bg-c2c-base md:border-l-2 border-c2c-orange shadow-xl z-[100] overflow-y-auto animate-slide-in-right"
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-c2c-base border-b-2 border-c2c-orange z-10">
+          {headerContent}
+        </div>
+
+        {/* Content */}
+        {scrollableContent}
+      </div>
+
+      {modals}
     </>
   );
 }

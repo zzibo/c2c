@@ -53,7 +53,7 @@ export function ConfirmModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[250] flex items-center justify-center p-2 md:p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
@@ -66,7 +66,7 @@ export function ConfirmModal({
       {/* Modal */}
       <div
         ref={modalRef}
-        className="relative z-10 w-full max-w-md bg-white rounded-lg shadow-2xl border-2 border-gray-900"
+        className="relative z-10 w-full max-w-md mx-2 md:mx-0 bg-white rounded-lg shadow-2xl border-2 border-gray-900"
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-modal-title"
@@ -80,7 +80,7 @@ export function ConfirmModal({
             </h2>
             <button
               onClick={onClose}
-              className="text-gray-700 hover:text-gray-900 transition-colors text-2xl leading-none font-bold"
+              className="text-gray-700 hover:text-gray-900 transition-colors text-2xl leading-none font-bold min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label="Close"
             >
               ×
@@ -95,18 +95,18 @@ export function ConfirmModal({
           </p>
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-end gap-3">
             <Button
               variant="secondary"
               onClick={onClose}
-              className="min-w-[100px]"
+              className="min-w-[100px] min-h-[44px] w-full md:w-auto"
             >
               {cancelText}
             </Button>
             <Button
               variant={confirmVariant}
               onClick={handleConfirm}
-              className="min-w-[100px]"
+              className="min-w-[100px] min-h-[44px] w-full md:w-auto"
             >
               {confirmText}
             </Button>

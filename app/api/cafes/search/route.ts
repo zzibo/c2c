@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 
-// Geoapify Autocomplete/Search API endpoint
-const GEOAPIFY_AUTOCOMPLETE_URL = 'https://api.geoapify.com/v1/geocode/autocomplete';
+// Geoapify Places API endpoint (fallback only)
 const GEOAPIFY_PLACES_URL = 'https://api.geoapify.com/v2/places';
 
-// Search radius: 10 miles for more focused results
 const SEARCH_RADIUS_METERS = 16093; // 10 miles
-const FETCH_LIMIT = 200; // Fetch up to 200 from Geoapify
-const MAX_RESULTS = 100; // Show max 100 to user
+const MIN_DB_RESULTS = 5; // Only hit Geoapify if DB returns fewer than this
+const MAX_RESULTS = 100;
 
 // Filter interface
 interface SearchFilters {
@@ -36,7 +34,7 @@ export async function GET(request: NextRequest) {
     const query = searchParams.get('q');
     const lat = searchParams.get('lat');
     const lng = searchParams.get('lng');
-    
+
     // Parse filter parameters
     const filters: SearchFilters = {
       maxDistance: searchParams.get('maxDistance') ? parseFloat(searchParams.get('maxDistance')!) : 10,
@@ -48,7 +46,7 @@ export async function GET(request: NextRequest) {
       minSeatingRating: searchParams.get('minSeatingRating') ? parseFloat(searchParams.get('minSeatingRating')!) : 0,
       minNoiseRating: searchParams.get('minNoiseRating') ? parseFloat(searchParams.get('minNoiseRating')!) : 0,
       minReviews: searchParams.get('minReviews') ? parseInt(searchParams.get('minReviews')!) : 0,
-      sortBy: (searchParams.get('sortBy') as any) || 'relevance',
+      sortBy: (searchParams.get('sortBy') as SearchFilters['sortBy']) || 'relevance',
       hasWifi: searchParams.get('hasWifi') === 'true' ? true : searchParams.get('hasWifi') === 'false' ? false : null,
       hasOutlets: searchParams.get('hasOutlets') === 'true' ? true : searchParams.get('hasOutlets') === 'false' ? false : null,
       goodForWork: searchParams.get('goodForWork') === 'true' ? true : searchParams.get('goodForWork') === 'false' ? false : null,
@@ -57,7 +55,6 @@ export async function GET(request: NextRequest) {
       maxPriceLevel: searchParams.get('maxPriceLevel') ? parseInt(searchParams.get('maxPriceLevel')!) : -1,
     };
 
-    // Validate parameters
     if (!query) {
       return NextResponse.json(
         { error: 'Missing required parameter: q (search query)' },
@@ -82,159 +79,253 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Check for Geoapify API key
-    const apiKey = process.env.GEOAPIFY_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'Geoapify API key not configured. Get one free at https://www.geoapify.com/' },
-        { status: 500 }
-      );
-    }
-
-    // Determine search radius based on filter
-    const searchRadius = filters.maxDistance && filters.maxDistance > 0 
-      ? filters.maxDistance * 1609.34 // Convert miles to meters
+    const searchRadius = filters.maxDistance && filters.maxDistance > 0
+      ? filters.maxDistance * 1609.34
       : SEARCH_RADIUS_METERS;
 
-    // Build Geoapify Places API URL with text filter
-    const url = new URL(GEOAPIFY_PLACES_URL);
-    url.searchParams.append('categories', 'catering.cafe');
-    url.searchParams.append('filter', `circle:${longitude},${latitude},${searchRadius}`);
-    url.searchParams.append('limit', String(FETCH_LIMIT)); // Fetch up to 200 cafes
-    url.searchParams.append('apiKey', apiKey);
+    // ========================================================================
+    // STEP 1: SEARCH DATABASE FIRST (fast, free, includes user-submitted cafes)
+    // ========================================================================
+    // Build search patterns from query words for ILIKE matching.
+    // This handles typos better than full-text search because each word
+    // is matched independently with wildcards (e.g. "blue cofee" matches
+    // "Blue Bottle Coffee" because "blue" matches and "cofee" is close enough
+    // when we also do fuzzy scoring).
+    const searchWords = query.trim().toLowerCase().split(/\s+/).filter(w => w.length > 0);
 
-    // Fetch from Geoapify Places API
-    const response = await fetch(url.toString());
-    const data = await response.json();
+    // Query cafe_stats with geographic filter + ILIKE for each word.
+    // We use a broad ILIKE first (any word matches) then score in JS.
+    const ilikeClauses = searchWords.map(w => `%${w}%`);
 
-    if (!response.ok) {
-      console.error('Geoapify API error:', data);
-      return NextResponse.json(
-        { error: `Geoapify API error: ${response.status}`, details: data.message || 'Unknown error' },
-        { status: 500 }
-      );
+    // Build an OR filter: name or address contains any search word
+    let dbQuery = supabaseAdmin
+      .from('cafe_stats')
+      .select('id, geoapify_place_id, name, display_name, address, location, phone, website, user_photos, verified_hours, rating_count, avg_coffee, avg_vibe, avg_wifi, avg_outlets, avg_seating, avg_noise, avg_overall, last_rated_at, created_at')
+      .limit(MAX_RESULTS);
+
+    // Use .or() to match any word in name or address
+    const orConditions = ilikeClauses
+      .flatMap(pattern => [
+        `display_name.ilike.${pattern}`,
+        `name.ilike.${pattern}`,
+      ])
+      .join(',');
+    dbQuery = dbQuery.or(orConditions);
+
+    const { data: dbCafes, error: dbError } = await dbQuery;
+
+    if (dbError) {
+      console.error('Database search error:', dbError);
     }
 
-    // Normalize search query for lenient matching
-    const searchLower = query.toLowerCase().trim();
-    const searchNormalized = normalizeString(searchLower);
-    const searchWords = searchNormalized.split(/\s+/).filter(w => w.length > 0);
+    // Calculate distances and relevance scores for DB results
+    const dbResults = (dbCafes || []).map((cafe: any) => {
+      // Extract lat/lng from PostGIS location
+      // cafe_stats.location is a geography type - we need to parse it
+      // Since we can't use ST_X/ST_Y in the JS client, we'll use the
+      // geoapify data or a separate RPC call. For now, let's use a
+      // workaround: query with the RPC function instead.
+      return cafe;
+    });
 
-    const cafesWithDistance = (data.features || [])
-      .map((place: any) => {
-        const props = place.properties;
-        const cafeName = props.name || props.address_line1 || '';
-        const cafeNameLower = cafeName.toLowerCase();
-        const cafeNameNormalized = normalizeString(cafeNameLower);
+    // If we got DB results, use the RPC function for proper distance calculation
+    let scoredDbResults: any[] = [];
+    if (dbResults.length > 0) {
+      // Re-query using RPC to get proper lat/lng and distance
+      // We'll query nearby cafes and filter by the IDs we found
+      const cafeIds = dbResults.map((c: any) => c.id);
 
-        // Calculate distance from user location
-        const distance = calculateDistance(
-          latitude,
-          longitude,
-          props.lat,
-          props.lon
-        );
+      const { data: enrichedCafes } = await supabaseAdmin.rpc(
+        'get_nearby_cafes',
+        {
+          user_lat: latitude,
+          user_lng: longitude,
+          radius_meters: Math.round(searchRadius),
+          min_rating: 0,
+          result_limit: 500, // Get all nearby, we'll filter by ID
+        }
+      );
 
-        // Calculate relevance score (higher = better match)
-        const relevanceScore = calculateRelevanceScore(
-          searchLower,
-          searchNormalized,
-          searchWords,
-          cafeNameLower,
-          cafeNameNormalized
-        );
+      // Build a map of enriched data by ID
+      const enrichedMap = new Map<string, any>();
+      (enrichedCafes || []).forEach((c: any) => enrichedMap.set(c.id, c));
 
-        return {
-          cafe: {
-            id: props.place_id || `${props.lat}-${props.lon}`,
-            geoapifyPlaceId: props.place_id,
-            name: cafeName,
-            location: {
-              lat: props.lat,
-              lng: props.lon,
-            },
-            address: props.formatted || props.address_line2 || '',
-            placeId: props.place_id || `${props.lat}-${props.lon}`,
-            ratings: {
-              coffee: 0,
-              vibe: 0,
-              wifi: 0,
-              outlets: 0,
-              seating: 0,
-              noise: 0,
-              overall: 0,
-            },
-            totalReviews: 0,
-            photos: [],
-            priceLevel: props.price_level || undefined,
-            distance: Math.round(distance), // meters
-            isOpen: undefined,
-            website: props.website,
-            phone: props.contact?.phone,
-            hourstText: props.opening_hours,
-          },
-          distance,
-          relevanceScore,
-        };
-      })
-      // Filter: only include cafes with some match (relevance > 0)
-      .filter((item: any) => item.relevanceScore > 0);
+      // Also include DB results that are outside radius (they matched by name)
+      // For those, we do a direct lookup to get coordinates
+      const missingIds = cafeIds.filter((id: string) => !enrichedMap.has(id));
+      if (missingIds.length > 0) {
+        const { data: missingCafes } = await supabaseAdmin
+          .from('cafe_stats')
+          .select('id, geoapify_place_id, name, display_name, address, phone, website, user_photos, verified_hours, rating_count, avg_coffee, avg_vibe, avg_wifi, avg_outlets, avg_seating, avg_noise, avg_overall')
+          .in('id', missingIds);
 
-    // Enrich with database ratings
-    const placeIds = cafesWithDistance.map((item: any) => item.cafe.geoapifyPlaceId).filter(Boolean);
-    let dbRatingsMap: Map<string, any> = new Map();
-
-    if (placeIds.length > 0) {
-      const { data: dbCafes } = await supabaseAdmin
-        .from('cafe_stats')
-        .select('geoapify_place_id, avg_coffee, avg_vibe, avg_wifi, avg_outlets, avg_seating, avg_noise, avg_overall, rating_count')
-        .in('geoapify_place_id', placeIds);
-
-      if (dbCafes) {
-        dbCafes.forEach((cafe: any) => {
-          dbRatingsMap.set(cafe.geoapify_place_id, {
-            coffee: cafe.avg_coffee || 0,
-            vibe: cafe.avg_vibe || 0,
-            wifi: cafe.avg_wifi || 0,
-            outlets: cafe.avg_outlets || 0,
-            seating: cafe.avg_seating || 0,
-            noise: cafe.avg_noise || 0,
-            overall: cafe.avg_overall || 0,
-            totalReviews: cafe.rating_count || 0,
+        // For missing cafes we don't have PostGIS distance, set to null
+        (missingCafes || []).forEach((c: any) => {
+          enrichedMap.set(c.id, {
+            ...c,
+            latitude: null,
+            longitude: null,
+            distance_meters: null,
           });
         });
       }
+
+      // Score each result
+      const searchLower = query.toLowerCase().trim();
+      const searchNormalized = normalizeString(searchLower);
+      const searchWordsNorm = searchNormalized.split(/\s+/).filter(w => w.length > 0);
+
+      scoredDbResults = cafeIds
+        .map((id: string) => {
+          const enriched = enrichedMap.get(id);
+          const raw = dbResults.find((c: any) => c.id === id);
+          if (!enriched && !raw) return null;
+
+          const source = enriched || raw;
+          const cafeName = source.display_name || source.name || '';
+          const cafeNameLower = cafeName.toLowerCase();
+          const cafeNameNormalized = normalizeString(cafeNameLower);
+
+          const relevanceScore = calculateRelevanceScore(
+            searchLower,
+            searchNormalized,
+            searchWordsNorm,
+            cafeNameLower,
+            cafeNameNormalized
+          );
+
+          const distance = enriched?.distance_meters ?? null;
+
+          return {
+            cafe: {
+              id: source.id,
+              geoapifyPlaceId: source.geoapify_place_id,
+              name: cafeName,
+              location: {
+                lat: enriched?.latitude ?? null,
+                lng: enriched?.longitude ?? null,
+              },
+              address: source.address || '',
+              placeId: source.geoapify_place_id,
+              ratings: {
+                coffee: source.avg_coffee || 0,
+                vibe: source.avg_vibe || 0,
+                wifi: source.avg_wifi || 0,
+                outlets: source.avg_outlets || 0,
+                seating: source.avg_seating || 0,
+                noise: source.avg_noise || 0,
+                overall: source.avg_overall || 0,
+              },
+              totalReviews: source.rating_count || 0,
+              photos: source.user_photos || [],
+              distance: distance ? Math.round(distance) : null,
+              website: source.website,
+              phone: source.phone,
+              hoursText: source.verified_hours?.text,
+            },
+            distance: distance ?? Infinity,
+            relevanceScore,
+          };
+        })
+        .filter((item: any) => item !== null && item.relevanceScore > 0);
     }
 
-    // Enrich cafes with database ratings
-    const enrichedCafes = cafesWithDistance.map((item: any) => {
-      const dbData = dbRatingsMap.get(item.cafe.geoapifyPlaceId);
-      if (dbData) {
-        item.cafe.ratings = {
-          coffee: dbData.coffee,
-          vibe: dbData.vibe,
-          wifi: dbData.wifi,
-          outlets: dbData.outlets,
-          seating: dbData.seating,
-          noise: dbData.noise,
-          overall: dbData.overall,
-        };
-        item.cafe.totalReviews = dbData.totalReviews;
+    // ========================================================================
+    // STEP 2: IF NOT ENOUGH DB RESULTS, FALL BACK TO GEOAPIFY
+    // ========================================================================
+    let geoapifyResults: any[] = [];
+    let usedGeoapify = false;
+
+    if (scoredDbResults.length < MIN_DB_RESULTS) {
+      const apiKey = process.env.GEOAPIFY_API_KEY;
+      if (apiKey) {
+        usedGeoapify = true;
+
+        const url = new URL(GEOAPIFY_PLACES_URL);
+        url.searchParams.append('categories', 'catering.cafe');
+        url.searchParams.append('filter', `circle:${longitude},${latitude},${searchRadius}`);
+        url.searchParams.append('limit', '200');
+        url.searchParams.append('apiKey', apiKey);
+
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
+          const response = await fetch(url.toString(), { signal: controller.signal });
+          clearTimeout(timeoutId);
+
+          if (response.ok) {
+            const data = await response.json();
+
+            const searchLower = query.toLowerCase().trim();
+            const searchNormalized = normalizeString(searchLower);
+            const searchWordsNorm = searchNormalized.split(/\s+/).filter(w => w.length > 0);
+
+            // Track DB cafe IDs to avoid duplicates
+            const dbCafeGeoapifyIds = new Set(scoredDbResults.map((r: any) => r.cafe.geoapifyPlaceId).filter(Boolean));
+
+            geoapifyResults = (data.features || [])
+              .map((place: any) => {
+                const props = place.properties;
+                const placeId = props.place_id || `${props.lat}-${props.lon}`;
+
+                // Skip if already in DB results
+                if (dbCafeGeoapifyIds.has(placeId)) return null;
+
+                const cafeName = props.name || props.address_line1 || '';
+                const cafeNameLower = cafeName.toLowerCase();
+                const cafeNameNormalized = normalizeString(cafeNameLower);
+
+                const distance = calculateDistance(latitude, longitude, props.lat, props.lon);
+                const relevanceScore = calculateRelevanceScore(
+                  searchLower, searchNormalized, searchWordsNorm,
+                  cafeNameLower, cafeNameNormalized
+                );
+
+                return {
+                  cafe: {
+                    id: placeId,
+                    geoapifyPlaceId: placeId,
+                    name: cafeName,
+                    location: { lat: props.lat, lng: props.lon },
+                    address: props.formatted || props.address_line2 || '',
+                    placeId,
+                    ratings: { coffee: 0, vibe: 0, wifi: 0, outlets: 0, seating: 0, noise: 0, overall: 0 },
+                    totalReviews: 0,
+                    photos: [],
+                    priceLevel: props.price_level || undefined,
+                    distance: Math.round(distance),
+                    website: props.website,
+                    phone: props.contact?.phone,
+                    hoursText: props.opening_hours,
+                  },
+                  distance,
+                  relevanceScore,
+                };
+              })
+              .filter((item: any) => item !== null && item.relevanceScore > 0);
+          }
+        } catch (err) {
+          console.error('Geoapify fallback failed:', err);
+          // Non-fatal - we still have DB results
+        }
       }
-      return item;
-    });
+    }
+
+    // ========================================================================
+    // STEP 3: MERGE, FILTER, SORT, RETURN
+    // ========================================================================
+    // DB results come first (they have ratings), then Geoapify results
+    let allResults = [...scoredDbResults, ...geoapifyResults];
 
     // Apply filters
-    let filteredCafes = enrichedCafes.filter((item: any) => {
+    allResults = allResults.filter((item: any) => {
       const cafe = item.cafe;
-      
-      // Distance filter
-      if (filters.maxDistance && filters.maxDistance > 0) {
+
+      if (filters.maxDistance && filters.maxDistance > 0 && cafe.distance !== null) {
         const maxDistanceMeters = filters.maxDistance * 1609.34;
         if (item.distance > maxDistanceMeters) return false;
       }
 
-      // Rating filters
       if (filters.minOverallRating && filters.minOverallRating > 0) {
         if (cafe.ratings.overall < filters.minOverallRating) return false;
       }
@@ -256,13 +347,9 @@ export async function GET(request: NextRequest) {
       if (filters.minNoiseRating && filters.minNoiseRating > 0) {
         if (cafe.ratings.noise < filters.minNoiseRating) return false;
       }
-
-      // Review count filter
       if (filters.minReviews && filters.minReviews > 0) {
         if (cafe.totalReviews < filters.minReviews) return false;
       }
-
-      // Feature filters
       if (filters.hasWifi === true && cafe.ratings.wifi === 0) return false;
       if (filters.hasOutlets === true && cafe.ratings.outlets === 0) return false;
       if (filters.goodForWork === true) {
@@ -270,8 +357,6 @@ export async function GET(request: NextRequest) {
       }
       if (filters.quietWorkspace === true && cafe.ratings.noise < 4) return false;
       if (filters.spacious === true && cafe.ratings.seating < 4) return false;
-
-      // Price level filter
       if (filters.maxPriceLevel && filters.maxPriceLevel > 0 && cafe.priceLevel) {
         if (cafe.priceLevel > filters.maxPriceLevel) return false;
       }
@@ -279,16 +364,16 @@ export async function GET(request: NextRequest) {
       return true;
     });
 
-    // Sort according to sortBy
-    filteredCafes.sort((a: any, b: any) => {
+    // Sort
+    allResults.sort((a: any, b: any) => {
       switch (filters.sortBy) {
         case 'distance':
-          return a.distance - b.distance;
+          return (a.distance ?? Infinity) - (b.distance ?? Infinity);
         case 'rating':
           if (b.cafe.ratings.overall !== a.cafe.ratings.overall) {
             return b.cafe.ratings.overall - a.cafe.ratings.overall;
           }
-          return a.distance - b.distance;
+          return (a.distance ?? Infinity) - (b.distance ?? Infinity);
         case 'reviews':
           if (b.cafe.totalReviews !== a.cafe.totalReviews) {
             return b.cafe.totalReviews - a.cafe.totalReviews;
@@ -296,15 +381,17 @@ export async function GET(request: NextRequest) {
           return b.cafe.ratings.overall - a.cafe.ratings.overall;
         case 'relevance':
         default:
-          if (b.relevanceScore !== a.relevanceScore) {
-            return b.relevanceScore - a.relevanceScore;
-          }
-          return a.distance - b.distance;
+          // Boost DB results with reviews over Geoapify results
+          const aBoost = a.cafe.totalReviews > 0 ? 20 : 0;
+          const bBoost = b.cafe.totalReviews > 0 ? 20 : 0;
+          const aScore = a.relevanceScore + aBoost;
+          const bScore = b.relevanceScore + bBoost;
+          if (bScore !== aScore) return bScore - aScore;
+          return (a.distance ?? Infinity) - (b.distance ?? Infinity);
       }
     });
 
-    // Take top 100
-    const finalCafes = filteredCafes
+    const finalCafes = allResults
       .slice(0, MAX_RESULTS)
       .map((item: any) => item.cafe);
 
@@ -316,7 +403,9 @@ export async function GET(request: NextRequest) {
       searchCenter: { lat: latitude, lng: longitude },
       radiusMeters: searchRadius,
       radiusMiles: filters.maxDistance && filters.maxDistance > 0 ? filters.maxDistance : 10,
-      provider: 'Geoapify',
+      source: usedGeoapify ? 'database+geoapify' : 'database',
+      dbResults: scoredDbResults.length,
+      geoapifyResults: geoapifyResults.length,
       filtersApplied: filters,
     });
 
@@ -335,47 +424,13 @@ export async function GET(request: NextRequest) {
 function normalizeString(str: string): string {
   return str
     .toLowerCase()
-    .replace(/[^\w\s]/g, '') // Remove special characters
-    .replace(/\s+/g, ' ') // Normalize spaces
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
 /**
- * Calculate simple Levenshtein distance (edit distance)
- * Returns the minimum number of single-character edits needed
- */
-function levenshteinDistance(str1: string, str2: string): number {
-  const m = str1.length;
-  const n = str2.length;
-  const dp: number[][] = [];
-
-  for (let i = 0; i <= m; i++) {
-    dp[i] = [i];
-  }
-  for (let j = 0; j <= n; j++) {
-    dp[0][j] = j;
-  }
-
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      if (str1[i - 1] === str2[j - 1]) {
-        dp[i][j] = dp[i - 1][j - 1];
-      } else {
-        dp[i][j] = Math.min(
-          dp[i - 1][j] + 1, // deletion
-          dp[i][j - 1] + 1, // insertion
-          dp[i - 1][j - 1] + 1 // substitution
-        );
-      }
-    }
-  }
-
-  return dp[m][n];
-}
-
-/**
- * Calculate relevance score for a cafe name match
- * Returns a score from 0-100, where higher is better
+ * Calculate relevance score for a cafe name match (0-100, higher = better)
  */
 function calculateRelevanceScore(
   searchLower: string,
@@ -386,15 +441,9 @@ function calculateRelevanceScore(
 ): number {
   let score = 0;
 
-  // Exact match (case-insensitive) - highest priority
-  if (cafeNameLower === searchLower) {
-    return 100;
-  }
-
-  // Exact match (normalized, no special chars)
-  if (cafeNameNormalized === searchNormalized) {
-    return 95;
-  }
+  // Exact match (case-insensitive)
+  if (cafeNameLower === searchLower) return 100;
+  if (cafeNameNormalized === searchNormalized) return 95;
 
   // Starts with search query
   if (cafeNameLower.startsWith(searchLower)) {
@@ -410,50 +459,45 @@ function calculateRelevanceScore(
     score += 55;
   }
 
-  // Word boundary matching - check if all search words appear in cafe name
+  // Word boundary matching
   if (searchWords.length > 0) {
     const cafeWords = cafeNameNormalized.split(/\s+/);
-    const cafeWordsLower = cafeNameLower.split(/\s+/);
-    
+
     let wordsMatched = 0;
     for (const searchWord of searchWords) {
-      // Check if any cafe word starts with or equals the search word
-      const wordMatch = cafeWords.some(cafeWord => 
-        cafeWord === searchWord || cafeWord.startsWith(searchWord)
-      ) || cafeWordsLower.some(cafeWord => 
-        cafeWord.includes(searchWord)
+      const wordMatch = cafeWords.some(cafeWord =>
+        cafeWord === searchWord || cafeWord.startsWith(searchWord) || cafeWord.includes(searchWord)
       );
-      
-      if (wordMatch) {
-        wordsMatched++;
-      }
+      if (wordMatch) wordsMatched++;
     }
-    
-    // Score based on percentage of words matched
+
     const wordMatchRatio = wordsMatched / searchWords.length;
-    score += wordMatchRatio * 50; // Up to 50 points for word matching
+    score += wordMatchRatio * 50;
   }
 
   // Fuzzy matching for typos (only if no strong match yet)
-  if (score < 50 && searchLower.length >= 3) {
-    const distance = levenshteinDistance(searchLower, cafeNameLower);
-    const maxLen = Math.max(searchLower.length, cafeNameLower.length);
-    const similarity = 1 - (distance / maxLen);
-    
-    // Only apply fuzzy match if similarity is reasonable (>= 70%)
-    if (similarity >= 0.7) {
-      score = Math.max(score, similarity * 40); // Up to 40 points for fuzzy match
-    }
-  }
-
-  // Partial word matching - check if search appears as part of any word
-  if (score < 30) {
+  if (score < 50 && searchWords.length > 0) {
     const cafeWords = cafeNameNormalized.split(/\s+/);
-    for (const word of cafeWords) {
-      if (word.includes(searchNormalized) || searchNormalized.includes(word)) {
-        score = Math.max(score, 25);
-        break;
+    let fuzzyMatches = 0;
+
+    for (const searchWord of searchWords) {
+      if (searchWord.length < 3) continue;
+      for (const cafeWord of cafeWords) {
+        if (cafeWord.length < 3) continue;
+        const distance = levenshteinDistance(searchWord, cafeWord);
+        const maxLen = Math.max(searchWord.length, cafeWord.length);
+        const similarity = 1 - (distance / maxLen);
+        // Allow 1-2 character typos
+        if (similarity >= 0.6 || distance <= 2) {
+          fuzzyMatches++;
+          break;
+        }
       }
+    }
+
+    if (fuzzyMatches > 0) {
+      const fuzzyRatio = fuzzyMatches / searchWords.length;
+      score = Math.max(score, fuzzyRatio * 45);
     }
   }
 
@@ -461,11 +505,38 @@ function calculateRelevanceScore(
 }
 
 /**
- * Calculate distance between two coordinates using Haversine formula
- * Returns distance in meters
+ * Levenshtein distance (edit distance between two strings)
+ */
+function levenshteinDistance(str1: string, str2: string): number {
+  const m = str1.length;
+  const n = str2.length;
+  const dp: number[][] = [];
+
+  for (let i = 0; i <= m; i++) dp[i] = [i];
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (str1[i - 1] === str2[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1];
+      } else {
+        dp[i][j] = Math.min(
+          dp[i - 1][j] + 1,
+          dp[i][j - 1] + 1,
+          dp[i - 1][j - 1] + 1
+        );
+      }
+    }
+  }
+
+  return dp[m][n];
+}
+
+/**
+ * Haversine distance between two coordinates (returns meters)
  */
 function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371e3; // Earth's radius in meters
+  const R = 6371e3;
   const φ1 = (lat1 * Math.PI) / 180;
   const φ2 = (lat2 * Math.PI) / 180;
   const Δφ = ((lat2 - lat1) * Math.PI) / 180;
@@ -476,5 +547,5 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
     Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-  return R * c; // Distance in meters
+  return R * c;
 }
