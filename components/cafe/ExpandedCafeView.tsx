@@ -360,10 +360,10 @@ export default function ExpandedCafeView({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.3 }}
-              className="fixed inset-4 md:inset-8 z-[201] flex rounded-2xl overflow-hidden shadow-2xl"
+              className="fixed inset-0 md:inset-4 lg:inset-8 z-[201] flex flex-col md:flex-row rounded-none md:rounded-2xl overflow-hidden shadow-2xl"
             >
-              {/* Left Side - Image Carousel (60%) */}
-              <div className="w-[60%] bg-gray-900 relative flex items-center justify-center">
+              {/* Left Side - Image Carousel (60% desktop, full width mobile) */}
+              <div className="h-[40vh] md:h-auto md:w-[60%] bg-gray-900 relative flex items-center justify-center shrink-0">
                 {/* Main Image */}
                 <div className="w-full h-full flex items-center justify-center p-8">
                   <Image
@@ -381,17 +381,19 @@ export default function ExpandedCafeView({
                   <>
                     <button
                       onClick={handlePreviousImage}
-                      className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white/90 hover:bg-white rounded-full transition-colors shadow-lg"
+                      className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 p-2 md:p-3 bg-white/90 hover:bg-white rounded-full transition-colors shadow-lg min-w-[44px] min-h-[44px] flex items-center justify-center"
                       aria-label="Previous image"
                     >
-                      <ChevronLeft size={28} className="text-c2c-orange" />
+                      <ChevronLeft size={24} className="text-c2c-orange md:hidden" />
+                      <ChevronLeft size={28} className="text-c2c-orange hidden md:block" />
                     </button>
                     <button
                       onClick={handleNextImage}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white/90 hover:bg-white rounded-full transition-colors shadow-lg"
+                      className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 p-2 md:p-3 bg-white/90 hover:bg-white rounded-full transition-colors shadow-lg min-w-[44px] min-h-[44px] flex items-center justify-center"
                       aria-label="Next image"
                     >
-                      <ChevronRight size={28} className="text-c2c-orange" />
+                      <ChevronRight size={24} className="text-c2c-orange md:hidden" />
+                      <ChevronRight size={28} className="text-c2c-orange hidden md:block" />
                     </button>
                   </>
                 )}
@@ -411,10 +413,10 @@ export default function ExpandedCafeView({
                 )}
               </div>
 
-              {/* Right Side - Cafe Details (40%) */}
-              <div className="w-[40%] bg-c2c-base flex flex-col h-full">
+              {/* Right Side - Cafe Details (40% desktop, full width mobile) */}
+              <div className="flex-1 md:w-[40%] bg-c2c-base flex flex-col min-h-0">
                 {/* Header with Close Button */}
-                <div className="p-6 border-b-2 border-c2c-orange flex items-start justify-between">
+                <div className="p-4 md:p-6 border-b-2 border-c2c-orange flex items-start justify-between">
                   <div className="flex-1 pr-4">
                     <h2 className="text-xl font-bold text-c2c-orange mb-2">{cafe.name}</h2>
                     {cafe.address && (
@@ -433,17 +435,19 @@ export default function ExpandedCafeView({
                       )}
                     </div>
                   </div>
+                  {/* Back arrow on mobile, X on desktop */}
                   <button
                     onClick={onClose}
-                    className="p-2 hover:bg-c2c-orange/10 rounded-full transition-colors"
+                    className="p-2 hover:bg-c2c-orange/10 rounded-full transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
                     aria-label="Close expanded view"
                   >
-                    <X size={24} className="text-c2c-orange" />
+                    <ChevronLeft size={24} className="text-c2c-orange md:hidden" />
+                    <X size={24} className="text-c2c-orange hidden md:block" />
                   </button>
                 </div>
 
                 {/* Scrollable Content */}
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className="flex-1 overflow-y-auto p-4 md:p-6">
                   {isLoading ? (
                     <div className="text-center py-8 text-gray-700">
                       <div className="animate-spin h-8 w-8 border-2 border-c2c-orange border-t-transparent rounded-full mx-auto mb-2"></div>
@@ -599,11 +603,11 @@ export default function ExpandedCafeView({
                             </div>
 
                             {/* Submit Buttons */}
-                            <div className="flex gap-3 mt-6">
+                            <div className="flex flex-col md:flex-row gap-3 mt-6">
                               <button
                                 onClick={handleSubmit}
                                 disabled={!user || submitMutation.isPending}
-                                className="flex-1 bg-c2c-orange hover:bg-c2c-orange-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg transition-all text-sm font-medium"
+                                className="flex-1 bg-c2c-orange hover:bg-c2c-orange-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg transition-all text-sm font-medium min-h-[44px]"
                               >
                                 {submitMutation.isPending
                                   ? 'Submitting...'
@@ -614,7 +618,7 @@ export default function ExpandedCafeView({
                               {isEditing && (
                                 <button
                                   onClick={handleCancelEdit}
-                                  className="px-6 py-3 bg-white hover:bg-gray-100 text-c2c-orange border-2 border-c2c-orange rounded-lg transition-all text-sm font-medium"
+                                  className="px-6 py-3 bg-white hover:bg-gray-100 text-c2c-orange border-2 border-c2c-orange rounded-lg transition-all text-sm font-medium min-h-[44px]"
                                 >
                                   Cancel
                                 </button>

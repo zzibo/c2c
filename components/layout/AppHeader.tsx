@@ -62,7 +62,7 @@ export function AppHeader() {
                             damping: 30,
                             mass: 0.8
                         }}
-                        className="fixed top-4 left-1/3 z-40 w-1/3"
+                        className="fixed top-4 hidden md:block md:left-1/4 md:w-1/2 lg:left-1/3 lg:w-1/3 z-40"
                     >
                         <div className="flex justify-center items-center gap-4 px-5 py-3 bg-c2c-base backdrop-blur border border-c2c-orange/20 shadow-xl rounded-full">
                             {/* Logo */}
@@ -156,20 +156,20 @@ export function AppHeader() {
             </AnimatePresence>
 
             {/* Top-right controls */}
-            <div className="fixed top-8 right-16 z-50 flex items-center gap-3">
+            <div className="fixed top-4 right-4 md:top-6 md:right-8 lg:top-8 lg:right-16 z-50 flex items-center gap-2 md:gap-3">
                 {/* Add Cafe button */}
                 <button
                     onClick={() => {
                         setAddCafeMode(!isAddCafeMode);
                     }}
-                    className={`px-4 py-2 rounded-full ${
+                    className={`p-2 md:px-4 md:py-2 rounded-full ${
                         isAddCafeMode
                             ? 'bg-gray-700 text-white'
                             : 'bg-c2c-orange text-white hover:bg-c2c-orange-dark'
-                    } flex items-center gap-2 shadow-md transition-colors`}
+                    } flex items-center gap-2 shadow-md transition-colors min-w-[44px] min-h-[44px] justify-center`}
                     title={isAddCafeMode ? 'Cancel adding cafe' : 'Add a new cafe'}
                 >
-                    <span className="text-sm font-medium">{isAddCafeMode ? 'Cancel' : 'Add a cafe now!'}</span>
+                    <span className="text-sm font-medium hidden md:inline">{isAddCafeMode ? 'Cancel' : 'Add a cafe now!'}</span>
                     <Plus className={`h-5 w-5 ${isAddCafeMode ? 'rotate-45' : ''} transition-transform`} />
                 </button>
                 
@@ -190,7 +190,7 @@ export function AppHeader() {
                 ) : (
                     <button
                         onClick={() => setShowAuthModal(true)}
-                        className="px-4 py-2 text-sm bg-c2c-orange hover:bg-c2c-orange-dark text-white rounded-full shadow-md transition-colors"
+                        className="px-3 py-1.5 text-xs md:px-4 md:py-2 md:text-sm bg-c2c-orange hover:bg-c2c-orange-dark text-white rounded-full shadow-md transition-colors min-h-[44px] flex items-center"
                     >
                         Sign In
                     </button>
