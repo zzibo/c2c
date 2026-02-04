@@ -41,7 +41,7 @@ export function Modal({ isOpen, onClose, children, title, size = 'md' }: ModalPr
 
   return (
     <div
-      className="fixed inset-0 z-[220] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[220] flex items-center justify-center p-0 md:p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
@@ -54,18 +54,18 @@ export function Modal({ isOpen, onClose, children, title, size = 'md' }: ModalPr
       {/* Modal */}
       <div
         ref={modalRef}
-        className={`relative z-10 w-full ${sizeClasses[size]} bg-white rounded-lg shadow-2xl border-2 border-gray-900`}
+        className={`relative z-10 w-full h-full md:h-auto ${sizeClasses[size]} bg-white rounded-none md:rounded-lg shadow-2xl md:border-2 md:border-gray-900`}
         role="dialog"
         aria-modal="true"
       >
         {/* Header */}
         {title && (
-          <div className="border-b-2 border-gray-300 px-6 py-4 bg-c2c-base rounded-t-lg">
+          <div className="border-b-2 border-gray-300 px-4 py-3 md:px-6 md:py-4 bg-c2c-base md:rounded-t-lg">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900">{title}</h2>
+              <h2 className="text-lg md:text-xl font-bold text-gray-900">{title}</h2>
               <button
                 onClick={onClose}
-                className="text-gray-700 hover:text-gray-900 transition-colors text-2xl leading-none font-bold"
+                className="text-gray-700 hover:text-gray-900 transition-colors text-2xl leading-none font-bold min-w-[44px] min-h-[44px] flex items-center justify-center"
                 aria-label="Close"
               >
                 ×
@@ -75,7 +75,7 @@ export function Modal({ isOpen, onClose, children, title, size = 'md' }: ModalPr
         )}
 
         {/* Content */}
-        <div className="p-6">{children}</div>
+        <div className="p-4 md:p-6 overflow-y-auto max-h-[calc(100vh-80px)] md:max-h-none">{children}</div>
       </div>
     </div>
   );

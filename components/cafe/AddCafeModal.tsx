@@ -67,7 +67,7 @@ export function AddCafeModal({ isOpen, onClose, onSubmit, location }: AddCafeMod
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-0 md:p-4">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50"
@@ -75,14 +75,14 @@ export function AddCafeModal({ isOpen, onClose, onSubmit, location }: AddCafeMod
       />
 
       {/* Modal */}
-      <div className="relative bg-white border-2 border-gray-900 shadow-lg w-full max-w-md mx-4 rounded-lg">
+      <div className="relative bg-white md:border-2 md:border-gray-900 shadow-lg w-full h-full md:h-auto md:max-w-md md:mx-4 md:rounded-lg">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b-2 border-gray-300">
           <h2 className="text-lg font-bold text-gray-900 font-sans">Add a Cafe</h2>
           <button
             onClick={handleClose}
             disabled={isSubmitting}
-            className="text-gray-700 hover:text-gray-900 transition-colors disabled:opacity-50"
+            className="text-gray-700 hover:text-gray-900 transition-colors disabled:opacity-50 min-w-[44px] min-h-[44px] flex items-center justify-center"
             aria-label="Close"
           >
             <X size={24} />
@@ -146,12 +146,12 @@ export function AddCafeModal({ isOpen, onClose, onSubmit, location }: AddCafeMod
           )}
 
           {/* Action buttons */}
-          <div className="flex gap-3 pt-2">
+          <div className="flex flex-col md:flex-row gap-3 pt-2">
             <button
               type="button"
               onClick={handleClose}
               disabled={isSubmitting}
-              className="flex-1 px-4 py-2 bg-white border border-gray-700 text-gray-900 font-medium
+              className="flex-1 px-4 py-2 min-h-[44px] bg-white border border-gray-700 text-gray-900 font-medium
                          hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed
                          font-sans text-sm rounded-lg"
             >
@@ -160,7 +160,7 @@ export function AddCafeModal({ isOpen, onClose, onSubmit, location }: AddCafeMod
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex-1 px-4 py-2 bg-c2c-orange text-white font-medium
+              className="flex-1 px-4 py-2 min-h-[44px] bg-c2c-orange text-white font-medium
                          hover:bg-c2c-orange-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed
                          font-sans text-sm rounded-lg"
             >
