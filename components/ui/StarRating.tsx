@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import Image from 'next/image';
 
 interface StarRatingProps {
@@ -21,47 +21,85 @@ export default function StarRating({
   showNumber = false,
 }: StarRatingProps) {
   const [hoverRating, setHoverRating] = useState<number | null>(null);
+  const [isTouching, setIsTouching] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Calculate which rating to display (hover takes precedence)
   const displayRating = hoverRating !== null ? hoverRating : rating;
 
-  // Handle mouse move across stars - calculate half-star precision
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!interactive) return;
-
+  // Memoized rating calculation to avoid redundant getBoundingClientRect calls
+  const calculateRating = useCallback((clientX: number): number | null => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container) return null;
 
     const rect = container.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+    const x = clientX - rect.left;
     const starWidth = rect.width / maxStars;
     const starIndex = Math.floor(x / starWidth);
     const positionInStar = (x % starWidth) / starWidth;
 
-    // Determine if hover is on left half (0.5) or right half (1.0)
-    let newRating: number;
-    if (positionInStar < 0.5) {
-      newRating = starIndex + 0.5;
-    } else {
-      newRating = starIndex + 1;
-    }
+    // Determine if position is on left half (0.5) or right half (1.0)
+    let newRating = positionInStar < 0.5 ? starIndex + 0.5 : starIndex + 1;
 
     // Clamp between 0 and maxStars
-    newRating = Math.max(0, Math.min(maxStars, newRating));
+    return Math.max(0, Math.min(maxStars, newRating));
+  }, [maxStars]);
 
-    setHoverRating(newRating);
-  };
+  // Handle pointer move (unified mouse/touch) - only update if rating changed
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!interactive || isTouching) return;
 
-  const handleMouseLeave = () => {
-    if (!interactive) return;
+    const newRating = calculateRating(e.clientX);
+    if (newRating !== null) {
+      setHoverRating(prev => prev === newRating ? prev : newRating);
+    }
+  }, [interactive, isTouching, calculateRating]);
+
+  const handlePointerLeave = useCallback(() => {
+    if (!interactive || isTouching) return;
     setHoverRating(null);
-  };
+  }, [interactive, isTouching]);
 
-  const handleClick = () => {
+  // Touch-specific handlers for mobile
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!interactive) return;
+    setIsTouching(true);
+    const touch = e.touches[0];
+    const newRating = calculateRating(touch.clientX);
+    if (newRating !== null) {
+      setHoverRating(newRating);
+    }
+  }, [interactive, calculateRating]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!interactive) return;
+    e.preventDefault(); // Prevent scrolling while rating
+    const touch = e.touches[0];
+    const newRating = calculateRating(touch.clientX);
+    if (newRating !== null) {
+      setHoverRating(prev => prev === newRating ? prev : newRating);
+    }
+  }, [interactive, calculateRating]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (!interactive) {
+      setIsTouching(false);
+      return;
+    }
+
+    if (hoverRating !== null) {
+      onChange?.(hoverRating);
+    }
+
+    setIsTouching(false);
+    // Keep hover rating visible briefly for feedback, then clear
+    setTimeout(() => setHoverRating(null), 200);
+  }, [interactive, hoverRating, onChange]);
+
+  const handleClick = useCallback(() => {
     if (!interactive || hoverRating === null) return;
     onChange?.(hoverRating);
-  };
+  }, [interactive, hoverRating, onChange]);
 
   // Render individual star based on position
   const renderStar = (index: number) => {
@@ -110,10 +148,19 @@ export default function StarRating({
       <div
         ref={containerRef}
         className={`flex items-center ${interactive ? 'cursor-pointer' : ''}`}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
+        onPointerMove={handlePointerMove}
+        onPointerLeave={handlePointerLeave}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         onClick={handleClick}
-        style={{ userSelect: 'none' }}
+        style={{
+          userSelect: 'none',
+          touchAction: interactive ? 'none' : 'auto', // Prevent scroll during rating
+          // Add extra padding for larger touch target without affecting visual layout
+          padding: interactive ? '8px 0' : '0',
+          margin: interactive ? '-8px 0' : '0',
+        }}
       >
         {Array.from({ length: maxStars }, (_, i) => renderStar(i))}
       </div>
