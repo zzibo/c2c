@@ -10,6 +10,8 @@ const withSerwist = withSerwistInit({
 
 const nextConfig: NextConfig = {
   transpilePackages: ["react-map-gl", "mapbox-gl"],
+  // Empty turbopack config to allow build with Serwist (webpack-based)
+  turbopack: {},
 };
 
 export default withSerwist(nextConfig);

@@ -1,6 +1,7 @@
+/// <reference lib="webworker" />
 import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
-import { Serwist } from "serwist";
+import { Serwist, CacheFirst, ExpirationPlugin, CacheableResponsePlugin } from "serwist";
 
 // Serwist global config type declaration
 declare global {
@@ -27,63 +28,67 @@ const serwist = new Serwist({
   runtimeCaching: [
     // Mapbox vector tiles - CacheFirst with LRU
     {
-      urlPattern: /^https:\/\/api\.mapbox\.com\/v4\/.*/i,
-      handler: "CacheFirst",
-      options: {
+      matcher: ({ url }) => /^https:\/\/api\.mapbox\.com\/v4\//.test(url.href),
+      handler: new CacheFirst({
         cacheName: "mapbox-tiles-v1",
-        expiration: {
-          maxEntries: 500,
-          maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
-        },
-        cacheableResponse: {
-          statuses: [0, 200],
-        },
-      },
+        plugins: [
+          new ExpirationPlugin({
+            maxEntries: 500,
+            maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
+          }),
+          new CacheableResponsePlugin({
+            statuses: [0, 200],
+          }),
+        ],
+      }),
     },
 
     // Mapbox styles and sprites - CacheFirst, longer TTL
     {
-      urlPattern: /^https:\/\/api\.mapbox\.com\/(styles|sprites)\/.*/i,
-      handler: "CacheFirst",
-      options: {
+      matcher: ({ url }) => /^https:\/\/api\.mapbox\.com\/(styles|sprites)\//.test(url.href),
+      handler: new CacheFirst({
         cacheName: "mapbox-styles-v1",
-        expiration: {
-          maxEntries: 50,
-          maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
-        },
-        cacheableResponse: {
-          statuses: [0, 200],
-        },
-      },
+        plugins: [
+          new ExpirationPlugin({
+            maxEntries: 50,
+            maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+          }),
+          new CacheableResponsePlugin({
+            statuses: [0, 200],
+          }),
+        ],
+      }),
     },
 
     // Mapbox fonts/glyphs
     {
-      urlPattern: /^https:\/\/api\.mapbox\.com\/fonts\/.*/i,
-      handler: "CacheFirst",
-      options: {
+      matcher: ({ url }) => /^https:\/\/api\.mapbox\.com\/fonts\//.test(url.href),
+      handler: new CacheFirst({
         cacheName: "mapbox-fonts-v1",
-        expiration: {
-          maxEntries: 100,
-          maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
-        },
-        cacheableResponse: {
-          statuses: [0, 200],
-        },
-      },
+        plugins: [
+          new ExpirationPlugin({
+            maxEntries: 100,
+            maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+          }),
+          new CacheableResponsePlugin({
+            statuses: [0, 200],
+          }),
+        ],
+      }),
     },
 
     // App images in /assets - CacheFirst
     {
-      urlPattern: /\/assets\/.*\.(webp|png|jpg|jpeg|svg|gif)$/i,
-      handler: "CacheFirst",
-      options: {
+      matcher: ({ url }) => /\/assets\/.*\.(webp|png|jpg|jpeg|svg|gif)$/.test(url.pathname),
+      handler: new CacheFirst({
         cacheName: "app-images-v1",
-        expiration: {
-          maxEntries: 100,
-          maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
-        },
-      },
+        plugins: [
+          new ExpirationPlugin({
+            maxEntries: 100,
+            maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+          }),
+        ],
+      }),
     },
 
     // Include default Next.js caching rules
