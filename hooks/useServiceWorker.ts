@@ -1,69 +1,44 @@
-import { useEffect, useState } from 'react';
-import { CACHE_NAME } from '@/lib/constants/cacheNames';
+import { useEffect, useState } from "react";
+
+type SWStatus = "loading" | "ready" | "error" | "unsupported";
 
 /**
- * Hook to register service worker for map tile caching
- * Returns registration status for debugging
+ * Hook to register Serwist service worker
+ * Serwist handles caching, updates, and lifecycle automatically
  */
 export function useServiceWorker() {
-  const [status, setStatus] = useState<'registering' | 'registered' | 'error' | 'unsupported'>('registering');
+  const [status, setStatus] = useState<SWStatus>("loading");
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
-      console.warn('Service Worker not supported in this browser');
-      setStatus('unsupported');
+    // Skip in SSR or if SW not supported
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+      setStatus("unsupported");
       return;
     }
 
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-    let registration: ServiceWorkerRegistration | null = null;
-    let updateFoundListener: (() => void) | null = null;
+    // In development, Serwist is disabled via next.config.ts
+    if (process.env.NODE_ENV === "development") {
+      setStatus("unsupported");
+      return;
+    }
 
-    // Register service worker
+    // Register the SW (Serwist builds it to /sw.js)
     navigator.serviceWorker
-      .register('/sw.js')
-      .then((reg) => {
-        registration = reg;
-        console.log('✅ Service Worker registered successfully:', reg.scope);
-        console.log('📦 Map tiles will now be cached for faster loading');
-        setStatus('registered');
-        
-        // Log cache status
-        if ('caches' in window) {
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.keys().then((keys) => {
-              console.log(`🗺️  Cached ${keys.length} map tiles`);
-            });
-          });
-        }
-        
-        // Check for updates periodically
-        intervalId = setInterval(() => {
-          reg.update();
-        }, 60000); // Check every minute
-        
+      .register("/sw.js")
+      .then((registration) => {
+        console.log("✅ Service Worker registered:", registration.scope);
+        setStatus("ready");
+
         // Listen for updates
-        updateFoundListener = () => {
-          console.log('🔄 Service Worker update found');
-        };
-        reg.addEventListener('updatefound', updateFoundListener);
+        registration.addEventListener("updatefound", () => {
+          console.log("🔄 New Service Worker version available");
+        });
       })
       .catch((error) => {
-        console.error('❌ Service Worker registration failed:', error);
-        setStatus('error');
+        console.error("❌ Service Worker registration failed:", error);
+        setStatus("error");
       });
-
-    // Cleanup function
-    return () => {
-      if (intervalId !== null) {
-        clearInterval(intervalId);
-      }
-      if (registration && updateFoundListener) {
-        registration.removeEventListener('updatefound', updateFoundListener);
-      }
-    };
   }, []);
 
   return status;
 }
-
