@@ -20,6 +20,23 @@ import { useToast } from '@/lib/toast/ToastContext';
 import { MapPin } from 'lucide-react';
 import Image from 'next/image';
 
+// Pure function for distance calculation - moved outside component to prevent recreation
+// and avoid being a dependency in useMemo
+function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371e3; // Earth radius in meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // Distance in meters
+}
+
 interface MapViewProps {
   apiKey: string;
   initialCenter?: Coordinate;
@@ -498,30 +515,26 @@ export default function MapView({
 
   // Resize map when panel collapses/expands
   useEffect(() => {
+    // Reduced delay for snappier mobile experience
     const timer = setTimeout(() => {
-      if (mapRef.current) {
-        try {
-          // Try to get the underlying Mapbox map instance and call resize
-          const map = mapRef.current.getMap();
-          if (map && typeof map.resize === 'function') {
-            map.resize();
-          }
-        } catch (error) {
-          // Fallback: trigger window resize event which react-map-gl listens to
-          window.dispatchEvent(new Event('resize'));
-        }
-      } else {
-        // If ref not ready, trigger window resize as fallback
-        window.dispatchEvent(new Event('resize'));
+      const map = mapRef.current?.getMap();
+      if (map && typeof map.resize === 'function') {
+        // Direct API call - avoids synthetic window.resize events that
+        // trigger all resize listeners in the app (causing cascading re-renders)
+        map.resize();
       }
-    }, 350); // Slightly longer than transition to ensure DOM has updated
+      // Removed fallback window.dispatchEvent - it causes more performance harm than good
+    }, 200); // Reduced from 350ms
 
     return () => clearTimeout(timer);
   }, [isPanelCollapsed]);
 
-  // Update dropped pin tooltip position continuously while hovered
+  // Update dropped pin tooltip position while hovered
+  // Optimized: removed setInterval polling, use RAF for scroll/resize only
   useEffect(() => {
     if (!isDroppedPinHovered || !droppedPinRef.current) return;
+
+    let rafId: number | null = null;
 
     const updatePosition = () => {
       if (droppedPinRef.current) {
@@ -533,38 +546,30 @@ export default function MapView({
       }
     };
 
-    // Update immediately
+    // RAF-throttled handler for scroll/resize events
+    const handleUpdate = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(updatePosition);
+    };
+
+    // Update immediately on hover start
     updatePosition();
 
-    // Update on scroll/zoom/move
-    const interval = setInterval(updatePosition, 100);
-    window.addEventListener('scroll', updatePosition, true);
-    window.addEventListener('resize', updatePosition);
+    // Use RAF-throttled updates for scroll/resize (not continuous polling)
+    // This is much more performant than setInterval which fires regardless of need
+    window.addEventListener('scroll', handleUpdate, { capture: true, passive: true });
+    window.addEventListener('resize', handleUpdate, { passive: true });
 
     return () => {
-      clearInterval(interval);
-      window.removeEventListener('scroll', updatePosition, true);
-      window.removeEventListener('resize', updatePosition);
+      if (rafId) cancelAnimationFrame(rafId);
+      window.removeEventListener('scroll', handleUpdate, true);
+      window.removeEventListener('resize', handleUpdate);
     };
   }, [isDroppedPinHovered]);
 
-  // Helper function: Calculate distance between two points (Haversine formula)
-  const calculateDistance = useCallback((lat1: number, lng1: number, lat2: number, lng2: number): number => {
-    const R = 6371e3; // Earth radius in meters
-    const φ1 = (lat1 * Math.PI) / 180;
-    const φ2 = (lat2 * Math.PI) / 180;
-    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-    const Δλ = ((lng2 - lng1) * Math.PI) / 180;
-
-    const a =
-      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c; // Distance in meters
-  }, []);
-
   // Calculate distances and sort cafes by distance from user
+  // Uses the pure calculateDistance function defined outside the component
+  // to avoid being a dependency that changes on every render
   const cafesWithDistance = useMemo(() => {
     if (!userLocation) return cafes;
 
@@ -579,7 +584,7 @@ export default function MapView({
         ),
       }))
       .sort((a, b) => (a.distance || 0) - (b.distance || 0));
-  }, [cafes, userLocation, calculateDistance]);
+  }, [cafes, userLocation]);
 
   // Function to search for cafes around user location
   const searchAroundMe = useCallback(async () => {
@@ -765,13 +770,20 @@ export default function MapView({
       zoom: Math.max(viewState.zoom, 15)
     });
 
-    // Scroll panel item into view after a short delay to ensure DOM update
-    setTimeout(() => {
+    // Scroll panel item into view using requestIdleCallback for non-blocking scroll
+    // Use 'auto' behavior on mobile (instant) to avoid jank with simultaneous map animation
+    const scrollToItem = () => {
       const itemRef = cafeItemRefs.current[cafe.id];
       if (itemRef && panelRef.current && !isPanelCollapsed) {
-        itemRef.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        itemRef.scrollIntoView({ behavior: isMobile ? 'auto' : 'smooth', block: 'nearest' });
       }
-    }, 100);
+    };
+
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(scrollToItem);
+    } else {
+      setTimeout(scrollToItem, 100);
+    }
   };
 
   // Handle pin click - open rating panel and scroll panel to cafe
@@ -792,13 +804,19 @@ export default function MapView({
       zoom: Math.max(viewState.zoom, 15)
     });
 
-    // Scroll panel item into view after a short delay to ensure DOM update
-    setTimeout(() => {
+    // Scroll panel item into view using requestIdleCallback for non-blocking scroll
+    const scrollToItem = () => {
       const itemRef = cafeItemRefs.current[cafe.id];
       if (itemRef && panelRef.current && !isPanelCollapsed) {
-        itemRef.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        itemRef.scrollIntoView({ behavior: isMobile ? 'auto' : 'smooth', block: 'nearest' });
       }
-    }, 100);
+    };
+
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(scrollToItem);
+    } else {
+      setTimeout(scrollToItem, 100);
+    }
   };
 
   // Handle panel collapse/expand
