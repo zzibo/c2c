@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth/AuthContext";
@@ -29,6 +29,24 @@ const robotoMono = localFont({
 export const metadata: Metadata = {
   title: "C2C - Cafe to Code",
   description: "Discover the best cafes for coding and remote work",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "C2C",
+  },
+  formatDetection: {
+    telephone: false, // Prevent auto-linking phone numbers
+  },
+};
+
+// Viewport configuration for mobile devices
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#f4512c", // C2C orange
+  viewportFit: "cover", // For notched devices
 };
 
 export default function RootLayout({

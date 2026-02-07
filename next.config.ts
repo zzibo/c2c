@@ -1,8 +1,17 @@
+import withSerwistInit from "@serwist/next";
 import type { NextConfig } from "next";
 
+const withSerwist = withSerwistInit({
+  swSrc: "app/sw.ts",
+  swDest: "public/sw.js",
+  // Disable SW in development to avoid caching issues
+  disable: process.env.NODE_ENV === "development",
+});
+
 const nextConfig: NextConfig = {
-  /* config options here */
-  transpilePackages: ['react-map-gl', 'mapbox-gl'],
+  transpilePackages: ["react-map-gl", "mapbox-gl"],
+  // Empty turbopack config to allow build with Serwist (webpack-based)
+  turbopack: {},
 };
 
-export default nextConfig;
+export default withSerwist(nextConfig);
