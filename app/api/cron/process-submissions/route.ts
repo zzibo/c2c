@@ -66,7 +66,7 @@ async function getDailyProcessedCount(): Promise<number> {
 
     // Count submissions processed today (approved or rejected)
     const { count, error } = await supabase
-      .from('cafe_submissions')
+      .from('user_submitted_cafes')
       .select('*', { count: 'exact', head: true })
       .in('status', ['approved', 'rejected'])
       .gte('reviewed_at', todayStart.toISOString());
