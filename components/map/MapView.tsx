@@ -748,6 +748,20 @@ export default function MapView({
     }
   }, [userLocation, updateMapBounds]);
 
+  // Center map on cafe with bottom padding to account for bottom sheet
+  const centerMapOnCafe = useCallback((cafe: Cafe) => {
+    const map = mapRef.current?.getMap();
+    if (map) {
+      const bottomPadding = isMobile ? window.innerHeight * 0.5 : 0;
+      map.flyTo({
+        center: [cafe.location.lng, cafe.location.lat],
+        zoom: Math.max(viewState.zoom, 15),
+        padding: { top: 0, bottom: bottomPadding, left: 0, right: 0 },
+        duration: 1000,
+      });
+    }
+  }, [isMobile, viewState.zoom]);
+
   // Handle cafe panel item click - open rating panel
   const handleCafeClick = (cafe: Cafe) => {
     console.log('Opening rating panel for:', cafe.name);
@@ -755,15 +769,7 @@ export default function MapView({
     setSelectedCafeForRating(cafe);
     setShowRatingPanel(true);
 
-    // Calculate a latitude offset to account for bottom sheet covering ~35% of screen
-    const latOffset = isMobile ? -0.003 : 0;
-
-    // Center map on cafe
-    setViewState({
-      longitude: cafe.location.lng,
-      latitude: cafe.location.lat + latOffset,
-      zoom: Math.max(viewState.zoom, 15)
-    });
+    centerMapOnCafe(cafe);
 
     // Scroll panel item into view after a short delay to ensure DOM update
     setTimeout(() => {
@@ -782,15 +788,7 @@ export default function MapView({
     setSelectedCafeForRating(cafe);
     setShowRatingPanel(true);
 
-    // Calculate a latitude offset to account for bottom sheet covering ~35% of screen
-    const latOffset = isMobile ? -0.003 : 0;
-
-    // Center map on pin
-    setViewState({
-      longitude: cafe.location.lng,
-      latitude: cafe.location.lat + latOffset,
-      zoom: Math.max(viewState.zoom, 15)
-    });
+    centerMapOnCafe(cafe);
 
     // Scroll panel item into view after a short delay to ensure DOM update
     setTimeout(() => {
