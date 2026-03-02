@@ -872,7 +872,7 @@ export default function RatingPanel({
   if (isMobile) {
     return (
       <>
-        <BottomSheet snapPoints={[50, 90]} defaultSnap={1} className="z-[60]">
+        <BottomSheet snapPoints={[50, 90]} defaultSnap={0} className="z-[60]">
           {/* Header: photo + cafe info (always visible) */}
           <div className="shrink-0">
             {headerContent}
