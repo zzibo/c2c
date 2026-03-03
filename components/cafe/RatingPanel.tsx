@@ -713,7 +713,7 @@ export default function RatingPanel({
                     ratingId={userRating?.id}
                     existingImages={formData.photos || []}
                     onImagesChange={handleImagesChange}
-                    maxImages={1}
+                    maxImages={10}
                     disabled={!user}
                   />
                   {/* Debug: Show current photos state */}
