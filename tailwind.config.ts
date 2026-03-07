@@ -12,7 +12,7 @@ const config: Config = {
         background: "var(--background)",
         foreground: "var(--foreground)",
         // C2C brand colors (ONLY USE THESE)
-        'c2c-base': '#f6f0e8',        // warm off-white backgrounds
+        'c2c-base': '#F5F0E8',        // warm off-white backgrounds
         'c2c-orange': '#f4512c',      // primary accent (CTAs, highlights)
         'c2c-orange-dark': '#e64524', // hover/active states
       },
