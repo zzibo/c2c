@@ -1,4 +1,5 @@
-import puppeteer, { Browser, Page } from 'puppeteer';
+import puppeteer, { Browser, Page } from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 
 /**
  * Google Maps Cafe Data Interface
@@ -30,10 +31,12 @@ export async function scrapeGoogleMaps(url: string): Promise<GoogleMapsCafeData>
   let browser: Browser | null = null;
 
   try {
-    // Launch headless browser
+    // Launch headless browser (uses @sparticuz/chromium on serverless, local Chrome in dev)
+    const executablePath = process.env.CHROME_EXECUTABLE_PATH || await chromium.executablePath();
     browser = await puppeteer.launch({
+      args: chromium.args,
+      executablePath,
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
 
     const page: Page = await browser.newPage();
