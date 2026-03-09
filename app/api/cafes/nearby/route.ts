@@ -49,7 +49,10 @@ export async function GET(request: NextRequest) {
 
     if (dbError) {
       console.error('Supabase query error:', dbError);
-      // Fall through to Geoapify if DB fails
+      return NextResponse.json(
+        { error: 'Database query failed', details: 'Unable to search nearby cafes. Please try again.' },
+        { status: 503 }
+      );
     }
 
     // If we have enough cafes in DB, return immediately
@@ -175,7 +178,7 @@ export async function GET(request: NextRequest) {
           osm_id: props.osm_id,
           name: props.name || props.address_line1 || 'Unknown Cafe',
           address: props.formatted || props.address_line2,
-          location: `POINT(${props.lon} ${props.lat})`,
+          location: `POINT(${parseFloat(props.lon)} ${parseFloat(props.lat)})`,
           phone: props.contact?.phone,
           website: props.website,
           last_synced_at: new Date().toISOString(),
@@ -198,25 +201,30 @@ export async function GET(request: NextRequest) {
     // STEP 4: REFRESH MATERIALIZED VIEW (if we added cafes)
     // ========================================================================
     if (newCafesCount > 0) {
-      try {
-        await supabaseAdmin.rpc('refresh_cafe_stats');
-        console.log('✅ Refreshed cafe_stats materialized view');
-      } catch (err) {
-        console.error('Error refreshing materialized view:', err);
-        // Non-critical, continue
+      const { error: refreshErr } = await supabaseAdmin.rpc('refresh_cafe_stats');
+      if (refreshErr) {
+        console.error('Failed to refresh cafe_stats materialized view:', refreshErr);
       }
     }
 
     // ========================================================================
     // STEP 5: FETCH ALL CAFES FROM DB (now includes new ones + ratings)
     // ========================================================================
-    const { data: allCafes } = await supabaseAdmin.rpc('get_nearby_cafes', {
+    const { data: allCafes, error: allCafesError } = await supabaseAdmin.rpc('get_nearby_cafes', {
       user_lat: latitude,
       user_lng: longitude,
       radius_meters: SEARCH_RADIUS_METERS,
       min_rating: 0,
       result_limit: MAX_RESULTS,
     });
+
+    if (allCafesError) {
+      console.error('Error fetching all nearby cafes:', allCafesError);
+      return NextResponse.json(
+        { error: 'Database query failed', details: 'Unable to load cafes after sync.' },
+        { status: 503 }
+      );
+    }
 
     // Transform to frontend format
     // ✅ PERFORMANCE FIX: Use database UUID as ID

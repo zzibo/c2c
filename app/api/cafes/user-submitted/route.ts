@@ -15,9 +15,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!location.lat || !location.lng) {
+    const parsedLat = parseFloat(location.lat);
+    const parsedLng = parseFloat(location.lng);
+    if (!location.lat || !location.lng || isNaN(parsedLat) || isNaN(parsedLng) || parsedLng < -180 || parsedLng > 180 || parsedLat < -90 || parsedLat > 90) {
       return NextResponse.json(
-        { error: 'Invalid location: must include lat and lng' },
+        { error: 'Invalid location: must include valid lat and lng' },
         { status: 400 }
       );
     }
@@ -50,7 +52,7 @@ export async function POST(request: NextRequest) {
       .insert({
         name: name.trim(),
         google_maps_link: googleMapsLink.trim(),
-        location: `POINT(${location.lng} ${location.lat})`,
+        location: `POINT(${parsedLng} ${parsedLat})`,
         submitted_by: userId,
         status: 'pending', // Default status for review
       })

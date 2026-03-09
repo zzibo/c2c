@@ -74,12 +74,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate coordinates before PostGIS interpolation
+    const lng = parseFloat(String(cafeData.location.lng));
+    const lat = parseFloat(String(cafeData.location.lat));
+    if (isNaN(lng) || isNaN(lat) || lng < -180 || lng > 180 || lat < -90 || lat > 90) {
+      return NextResponse.json(
+        { error: 'Invalid coordinates in scraped data' },
+        { status: 400 }
+      );
+    }
+
     // Check if cafe already exists in database (by name and approximate location)
-    const { data: existingCafes } = await supabaseAdmin
+    const { data: existingCafes, error: duplicateCheckError } = await supabaseAdmin
       .from('cafes')
       .select('id, name, location')
       .ilike('name', `%${cafeData.name}%`)
       .limit(5);
+
+    if (duplicateCheckError) {
+      console.error('Duplicate check query error:', duplicateCheckError);
+      // Continue with insertion — better to risk a duplicate than block all submissions
+    }
 
     // Simple duplicate check: if name matches and within ~100m, consider it duplicate
     const isDuplicate = existingCafes?.some((cafe: any) => {
@@ -117,7 +132,7 @@ export async function POST(request: NextRequest) {
         geoapify_place_id: `googlemaps-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, // Unique placeholder
         name: cafeData.name,
         address: cafeData.address,
-        location: `POINT(${cafeData.location.lng} ${cafeData.location.lat})`, // PostGIS format
+        location: `POINT(${lng} ${lat})`, // PostGIS format — coordinates validated above
         phone: cafeData.phone || null,
         website: cafeData.website || null,
         user_photos: cafeData.photos || [],
@@ -143,12 +158,9 @@ export async function POST(request: NextRequest) {
     console.log('✅ Cafe stored successfully with ID:', cafeId);
 
     // Refresh materialized view to include the new cafe
-    try {
-      await supabaseAdmin.rpc('refresh_cafe_stats');
-      console.log('✅ Refreshed cafe_stats materialized view');
-    } catch (refreshError) {
-      console.warn('Warning: Failed to refresh materialized view:', refreshError);
-      // Non-critical error, continue
+    const { error: refreshError } = await supabaseAdmin.rpc('refresh_cafe_stats');
+    if (refreshError) {
+      console.error('Failed to refresh cafe_stats materialized view:', refreshError);
     }
 
     return NextResponse.json({
