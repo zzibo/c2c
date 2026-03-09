@@ -44,8 +44,8 @@ type AppAction =
   | { type: 'CLEAR_SEARCH' }
   | { type: 'SET_ADD_CAFE_MODE'; payload: boolean };
 
-// Default filters
-const defaultFilters: SearchFilters = {
+// Default filters (exported for use in FilterModal and other components)
+export const defaultFilters: SearchFilters = {
   maxDistance: 10,
   minOverallRating: 0,
   minWifiRating: 0,

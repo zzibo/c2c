@@ -2,23 +2,26 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import dynamic from 'next/dynamic';
 import Map, { Marker, NavigationControl, GeolocateControl } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useQuery } from '@tanstack/react-query';
 import type { Coordinate, Cafe } from '@/types/cafe';
-import RatingPanel from '@/components/cafe/RatingPanel';
-import ExpandedCafeView from '@/components/cafe/ExpandedCafeView';
 import { CafeSidebar } from '@/components/map/CafeSidebar';
 import { CafeMarker } from '@/components/map/CafeMarker';
-import { ConfirmModal } from '@/components/ui/ConfirmModal';
-import { AddCafeModal } from '@/components/cafe/AddCafeModal';
 import { useAppStore } from '@/lib/store/AppStore';
-import { loadMapState, saveMapState, clearMapState } from '@/lib/storage/mapStorage';
+import { loadMapState, saveMapState } from '@/lib/storage/mapStorage';
 import { useServiceWorker } from '@/hooks/useServiceWorker';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useToast } from '@/lib/toast/ToastContext';
 import { MapPin } from 'lucide-react';
 import Image from 'next/image';
+
+// Lazy-load heavy modal/panel components (only rendered when needed)
+const RatingPanel = dynamic(() => import('@/components/cafe/RatingPanel'));
+const ExpandedCafeView = dynamic(() => import('@/components/cafe/ExpandedCafeView'));
+const ConfirmModal = dynamic(() => import('@/components/ui/ConfirmModal').then(m => ({ default: m.ConfirmModal })));
+const AddCafeModal = dynamic(() => import('@/components/cafe/AddCafeModal').then(m => ({ default: m.AddCafeModal })));
 
 interface MapViewProps {
   apiKey: string;

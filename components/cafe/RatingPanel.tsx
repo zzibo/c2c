@@ -706,7 +706,7 @@ export default function RatingPanel({
                 {/* Photo Upload */}
                 <div className="mt-3">
                   <label className="text-xs text-c2c-orange block mb-1">
-                    Photo (optional)
+                    Photos (optional)
                   </label>
                   <ImageUpload
                     cafeId={cafe.id}
