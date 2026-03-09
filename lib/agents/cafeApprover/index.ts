@@ -12,6 +12,7 @@ import {
   ProcessingResult,
   CafeApproverConfig,
   AgentRunSummary,
+  ClaudeDecision,
   Coordinate,
 } from './types';
 import { MAX_SUBMISSIONS_PER_RUN, DUPLICATE_CHECK_RADIUS_METERS, DUPLICATE_NAME_THRESHOLD, HARD_REJECT_DISTANCE_METERS, HARD_REJECT_NAME_THRESHOLD } from './constants';
@@ -308,12 +309,23 @@ export async function processSubmission(
     console.log('  Using Claude API to verify submission...');
     result.usedClaude = true;
 
-    const claudeDecision = await evaluateWithClaude(
-      { name: parsed.name, location: parsed.location },
-      { name: scrapedData.name, address: scrapedData.address, location: scrapedData.location, placeType: scrapedData.placeType },
-      validation.nameMatchScore,
-      validation.distanceMeters
-    );
+    let claudeDecision: ClaudeDecision;
+    try {
+      claudeDecision = await evaluateWithClaude(
+        { name: parsed.name, location: parsed.location },
+        { name: scrapedData.name, address: scrapedData.address, location: scrapedData.location, placeType: scrapedData.placeType },
+        validation.nameMatchScore,
+        validation.distanceMeters
+      );
+    } catch (claudeError) {
+      // Claude API failed — flag for manual review instead of rejecting
+      const errorMsg = claudeError instanceof Error ? claudeError.message : 'Unknown error';
+      console.error(`  ⚠️ Claude API failed, flagging for manual review: ${errorMsg}`);
+      result.action = 'flagged';
+      result.notes = `Claude API unavailable: ${errorMsg}. Left in pending for retry.`;
+      // Do NOT update submission status — leave as 'pending' for next cron run
+      return result;
+    }
 
     console.log(`  Claude decision: ${claudeDecision.approve ? 'APPROVE' : 'REJECT'}`);
     console.log(`  Reasoning: ${claudeDecision.reasoning}`);
@@ -329,11 +341,11 @@ export async function processSubmission(
           cafeId
         );
         // Immediately refresh materialized view so cafe appears on map
-        try {
-          await supabaseAdmin.rpc('refresh_cafe_stats');
-          console.log('  ✅ Refreshed cafe_stats - cafe now visible on map');
-        } catch (refreshError) {
+        const { error: refreshError } = await supabaseAdmin.rpc('refresh_cafe_stats');
+        if (refreshError) {
           console.error('  ⚠️ Failed to refresh cafe_stats:', refreshError);
+        } else {
+          console.log('  ✅ Refreshed cafe_stats - cafe now visible on map');
         }
       }
       result.action = 'approved';
@@ -457,11 +469,11 @@ export async function runCafeApproverAgent(
 
   // Refresh cafe stats if any cafes were approved
   if (summary.approved > 0 && !fullConfig.dryRun) {
-    try {
-      await supabaseAdmin.rpc('refresh_cafe_stats');
+    const { error: finalRefreshError } = await supabaseAdmin.rpc('refresh_cafe_stats');
+    if (finalRefreshError) {
+      console.error('Failed to refresh cafe stats:', finalRefreshError);
+    } else {
       console.log('Refreshed cafe stats materialized view.');
-    } catch (error) {
-      console.error('Failed to refresh cafe stats:', error);
     }
   }
 

@@ -276,27 +276,13 @@ export function CafeSidebar({
                     >
                         <div className="p-4 space-y-3">
                             {cafes.map((cafe, index) => (
-                                <motion.div
+                                <div
                                     key={cafe.id}
                                     ref={(el) => {
                                         cafeItemRefs.current[cafe.id] = el;
                                     }}
-                                    initial={{ opacity: 0, x: -20, scale: 0.95 }}
-                                    animate={{ opacity: 1, x: 0, scale: 1 }}
-                                    exit={{ opacity: 0, x: -20, scale: 0.95 }}
-                                    transition={{
-                                        delay: index * 0.05,
-                                        type: "spring",
-                                        stiffness: 300,
-                                        damping: 25
-                                    }}
                                     onClick={() => onCafeClick(cafe)}
-                                    whileHover={{
-                                        scale: 1.02,
-                                        transition: { duration: 0.2 }
-                                    }}
-                                    whileTap={{ scale: 0.98 }}
-                                    className={`p-3 min-h-[44px] cursor-pointer rounded border-2 ${selectedCafeId === cafe.id
+                                    className={`p-3 min-h-[44px] cursor-pointer rounded border-2 transition-colors duration-150 hover:scale-[1.02] active:scale-[0.98] transform ${selectedCafeId === cafe.id
                                         ? 'border-c2c-orange bg-c2c-base'
                                         : 'border-c2c-orange/40 bg-white hover:bg-c2c-base'
                                         }`}
@@ -341,7 +327,7 @@ export function CafeSidebar({
 
                                         </div>
                                     </div>
-                                </motion.div>
+                                </div>
                             ))}
                         </div>
                     </motion.div>

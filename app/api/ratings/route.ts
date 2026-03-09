@@ -119,12 +119,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Refresh materialized view to update aggregates
-    try {
-      await supabaseAdmin.rpc('refresh_cafe_stats');
-      console.log('✅ Refreshed cafe_stats materialized view');
-    } catch (refreshError) {
-      console.error('Error refreshing materialized view:', refreshError);
-      // Non-critical, continue
+    const { error: refreshError } = await supabaseAdmin.rpc('refresh_cafe_stats');
+    if (refreshError) {
+      console.error('Failed to refresh cafe_stats materialized view:', refreshError);
     }
 
     return NextResponse.json({
