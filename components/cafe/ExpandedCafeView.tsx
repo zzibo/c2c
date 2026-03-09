@@ -585,14 +585,14 @@ export default function ExpandedCafeView({
                             {/* Photo Upload */}
                             <div className="mt-4">
                               <label className="text-sm text-c2c-orange block mb-2 font-medium">
-                                Photo (optional)
+                                Photos (optional)
                               </label>
                               <ImageUpload
                                 cafeId={cafe.id}
                                 ratingId={userRating?.id}
                                 existingImages={formData.photos || []}
                                 onImagesChange={handleImagesChange}
-                                maxImages={1}
+                                maxImages={10}
                                 disabled={!user}
                               />
                               {formData.photos && formData.photos.length > 0 && (

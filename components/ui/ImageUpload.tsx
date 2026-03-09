@@ -62,12 +62,20 @@ export function ImageUpload({
         return data.url;
       });
 
-      const uploadedUrls = await Promise.all(uploadPromises);
-      console.log('✅ Upload successful! URLs:', uploadedUrls);
-      console.log('📸 All images after upload:', [...existingImages, ...uploadedUrls]);
-      onImagesChange([...existingImages, ...uploadedUrls]);
+      const results = await Promise.allSettled(uploadPromises);
+      const uploadedUrls = results
+        .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
+        .map((r) => r.value);
+      const failedCount = results.filter((r) => r.status === 'rejected').length;
+
+      if (uploadedUrls.length > 0) {
+        onImagesChange([...existingImages, ...uploadedUrls]);
+      }
+
+      if (failedCount > 0) {
+        setError(`${failedCount} image(s) failed to upload`);
+      }
     } catch (err) {
-      console.error('❌ Upload error:', err);
       setError(err instanceof Error ? err.message : 'Failed to upload images');
     } finally {
       setUploading(false);

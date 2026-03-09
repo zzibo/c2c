@@ -3,26 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '@/components/auth/Modal';
 import { Button } from './Button';
+import { defaultFilters as DEFAULT_FILTERS } from '@/lib/store/AppStore';
 import type { SearchFilters } from '@/lib/store/AppStore';
-
-const DEFAULT_FILTERS: SearchFilters = {
-  maxDistance: 10,
-  minOverallRating: 0,
-  minWifiRating: 0,
-  minOutletsRating: 0,
-  minCoffeeRating: 0,
-  minVibeRating: 0,
-  minSeatingRating: 0,
-  minNoiseRating: 0,
-  minReviews: 0,
-  sortBy: 'relevance',
-  hasWifi: null,
-  hasOutlets: null,
-  goodForWork: null,
-  quietWorkspace: null,
-  spacious: null,
-  maxPriceLevel: -1,
-};
 
 interface FilterModalProps {
   isOpen: boolean;
