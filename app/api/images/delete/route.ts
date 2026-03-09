@@ -30,6 +30,14 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    // Path traversal protection
+    if (path.includes('..') || path.includes('//') || path.startsWith('/')) {
+      return NextResponse.json(
+        { error: 'Invalid path' },
+        { status: 400 }
+      );
+    }
+
     // Verify the image belongs to the user
     // Path format: {cafe_id}/{rating_id or 'cafe'}/{filename}
     const pathParts = path.split('/');
@@ -40,10 +48,23 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const [, ratingIdOrFolder] = pathParts;
+    const [cafeId, ratingIdOrFolder] = pathParts;
 
-    // If it's a rating photo, verify ownership
-    if (ratingIdOrFolder !== 'cafe' && ratingIdOrFolder !== 'rating') {
+    // Cafe-level photos: verify the user submitted this cafe
+    if (ratingIdOrFolder === 'cafe') {
+      const { data: submission } = await supabaseAdmin
+        .from('user_submitted_cafes')
+        .select('submitted_by')
+        .eq('approved_cafe_id', cafeId)
+        .single();
+
+      if (!submission || submission.submitted_by !== session.user.id) {
+        return NextResponse.json(
+          { error: 'Unauthorized. You can only delete your own cafe photos.' },
+          { status: 403 }
+        );
+      }
+    } else if (ratingIdOrFolder !== 'rating') {
       // Assume it's a rating ID
       const { data: rating, error: ratingError } = await supabaseAdmin
         .from('ratings')

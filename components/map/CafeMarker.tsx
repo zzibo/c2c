@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import { Marker } from 'react-map-gl/mapbox';
@@ -14,7 +14,7 @@ interface CafeMarkerProps {
   onClick: (cafe: Cafe, e: React.MouseEvent) => void;
 }
 
-export function CafeMarker({ cafe, isSelected, zoom, onClick }: CafeMarkerProps) {
+export const CafeMarker = React.memo(function CafeMarker({ cafe, isSelected, zoom, onClick }: CafeMarkerProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
   const markerRef = useRef<HTMLDivElement>(null);
@@ -143,5 +143,5 @@ export function CafeMarker({ cafe, isSelected, zoom, onClick }: CafeMarkerProps)
       )}
     </>
   );
-}
+});
 

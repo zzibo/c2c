@@ -130,11 +130,8 @@ export async function evaluateWithClaude(
   // Check if Claude API is available
   const client = getAnthropicClient();
   if (!client) {
-    console.warn('  ANTHROPIC_API_KEY not set - flagging borderline case for manual review');
-    return {
-      approve: false,
-      reasoning: 'ANTHROPIC_API_KEY not configured. Borderline case flagged for manual review.',
-    };
+    console.error('  ANTHROPIC_API_KEY not set - cannot evaluate submission');
+    throw new Error('ANTHROPIC_API_KEY not configured. Cannot evaluate submission.');
   }
 
   try {
@@ -173,13 +170,9 @@ export async function evaluateWithClaude(
 
     return decision;
   } catch (error) {
-    // If Claude API fails, default to flagging for manual review
+    // Re-throw so the caller can distinguish API failures from real rejections
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Claude API error:', errorMessage);
-
-    return {
-      approve: false,
-      reasoning: `Claude API error: ${errorMessage}. Flagged for manual review.`,
-    };
+    throw new Error(`Claude API error: ${errorMessage}`);
   }
 }
