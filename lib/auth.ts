@@ -83,13 +83,17 @@ export async function updateProfile(
     metadata?: Partial<ProfileMetadata>;
   }
 ): Promise<Profile> {
-  const { data: currentProfile } = await supabase
+  const { data: currentProfile, error: profileFetchError } = await supabase
     .from('profiles')
     .select('metadata')
     .eq('id', userId)
     .single();
 
-  const updateData: any = {};
+  if (profileFetchError && profileFetchError.code !== 'PGRST116') {
+    throw new Error(`Failed to fetch current profile: ${profileFetchError.message}`);
+  }
+
+  const updateData: Record<string, unknown> = {};
 
   if (updates.username) {
     updateData.username = updates.username;

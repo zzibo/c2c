@@ -36,7 +36,7 @@ export async function scrapeGoogleMaps(url: string): Promise<GoogleMapsCafeData>
     browser = await puppeteer.launch({
       args: chromium.args,
       executablePath,
-      headless: true,
+      headless: 'shell',
     });
 
     const page: Page = await browser.newPage();

@@ -116,6 +116,10 @@ export async function GET(request: NextRequest) {
 
     if (dbError) {
       console.error('Database search error:', dbError);
+      return NextResponse.json(
+        { error: 'Database search failed', details: 'Unable to search cafes. Please try again.' },
+        { status: 503 }
+      );
     }
 
     // Calculate distances and relevance scores for DB results
@@ -135,7 +139,7 @@ export async function GET(request: NextRequest) {
       // We'll query nearby cafes and filter by the IDs we found
       const cafeIds = dbResults.map((c: any) => c.id);
 
-      const { data: enrichedCafes } = await supabaseAdmin.rpc(
+      const { data: enrichedCafes, error: enrichError } = await supabaseAdmin.rpc(
         'get_nearby_cafes',
         {
           user_lat: latitude,
@@ -146,6 +150,10 @@ export async function GET(request: NextRequest) {
         }
       );
 
+      if (enrichError) {
+        console.error('Enrichment query error:', enrichError);
+      }
+
       // Build a map of enriched data by ID
       const enrichedMap = new Map<string, any>();
       (enrichedCafes || []).forEach((c: any) => enrichedMap.set(c.id, c));
@@ -154,10 +162,14 @@ export async function GET(request: NextRequest) {
       // For those, we do a direct lookup to get coordinates
       const missingIds = cafeIds.filter((id: string) => !enrichedMap.has(id));
       if (missingIds.length > 0) {
-        const { data: missingCafes } = await supabaseAdmin
+        const { data: missingCafes, error: missingError } = await supabaseAdmin
           .from('cafe_stats')
           .select('id, geoapify_place_id, name, display_name, address, phone, website, user_photos, verified_hours, rating_count, avg_coffee, avg_vibe, avg_wifi, avg_outlets, avg_seating, avg_noise, avg_overall')
           .in('id', missingIds);
+
+        if (missingError) {
+          console.error('Missing cafes query error:', missingError);
+        }
 
         // For missing cafes we don't have PostGIS distance, set to null
         (missingCafes || []).forEach((c: any) => {

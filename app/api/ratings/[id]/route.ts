@@ -113,11 +113,9 @@ export async function PUT(
     }
 
     // Refresh materialized view
-    try {
-      await supabaseAdmin.rpc('refresh_cafe_stats');
-      console.log('✅ Refreshed cafe_stats materialized view');
-    } catch (refreshError) {
-      console.error('Error refreshing materialized view:', refreshError);
+    const { error: refreshError } = await supabaseAdmin.rpc('refresh_cafe_stats');
+    if (refreshError) {
+      console.error('Failed to refresh cafe_stats materialized view:', refreshError);
     }
 
     return NextResponse.json({
@@ -192,11 +190,9 @@ export async function DELETE(
     }
 
     // Refresh materialized view
-    try {
-      await supabaseAdmin.rpc('refresh_cafe_stats');
-      console.log('✅ Refreshed cafe_stats after delete');
-    } catch (refreshError) {
-      console.error('Error refreshing materialized view:', refreshError);
+    const { error: deleteRefreshError } = await supabaseAdmin.rpc('refresh_cafe_stats');
+    if (deleteRefreshError) {
+      console.error('Failed to refresh cafe_stats after delete:', deleteRefreshError);
     }
 
     return NextResponse.json({
