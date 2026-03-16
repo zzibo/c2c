@@ -26,7 +26,7 @@ export function BottomSheet({
   const [windowHeight, setWindowHeight] = useState(800);
   const [currentSnap, setCurrentSnap] = useState(defaultSnap);
   const [scrolledPast, setScrolledPast] = useState(false);
-  const [dragOffset, setDragOffset] = useState(0); // Track drag offset to avoid getComputedStyle
+  const dragOffsetRef = useRef(0); // Track drag offset in ref to avoid per-frame re-renders
   const hasMounted = useRef(false);
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -77,7 +77,7 @@ export function BottomSheet({
   const snapTo = useCallback(
     (snapIndex: number) => {
       setCurrentSnap(snapIndex);
-      setDragOffset(0); // Reset drag offset after snap
+      dragOffsetRef.current = 0; // Reset drag offset after snap
       onSnapChange?.(snapIndex);
       controls.start({
         y: snapYValues[snapIndex],
@@ -108,10 +108,10 @@ export function BottomSheet({
     }
   }, [controls, snapYValues, defaultSnap]);
 
-  // Track drag offset during drag to avoid expensive getComputedStyle on drag end
+  // Track drag offset in ref during drag (no re-render needed)
   const handleDrag = useCallback(
     (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-      setDragOffset(info.offset.y);
+      dragOffsetRef.current = info.offset.y;
     },
     []
   );
@@ -133,8 +133,7 @@ export function BottomSheet({
       }
 
       // Calculate current position using tracked drag offset instead of DOM read
-      // This avoids expensive getComputedStyle + DOMMatrix parsing
-      const currentTranslateY = snapYValues[currentSnap] + dragOffset;
+      const currentTranslateY = snapYValues[currentSnap] + dragOffsetRef.current;
 
       let nearestIdx = 0;
       let nearestDist = Math.abs(currentTranslateY - snapYValues[0]);
@@ -148,7 +147,7 @@ export function BottomSheet({
 
       snapTo(nearestIdx);
     },
-    [currentSnap, stableSnapPoints.length, snapTo, snapYValues, dragOffset]
+    [currentSnap, stableSnapPoints.length, snapTo, snapYValues]
   );
 
   // Passive scroll listener for better performance

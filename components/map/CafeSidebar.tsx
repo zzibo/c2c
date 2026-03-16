@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronRight, MapPin, Star, Filter } from 'lucide-react';
-import type { Cafe, Coordinate } from '@/types/cafe';
+import type { Cafe, Coordinate, AddressSuggestion } from '@/types/cafe';
 import { FilterModal } from '@/components/ui/FilterModal';
+import { SearchDropdown } from '@/components/map/SearchDropdown';
 import { useAppStore } from '@/lib/store/AppStore';
 import { useIsMobile, useIsTablet } from '@/hooks/useIsMobile';
 import { BottomSheet } from '@/components/map/BottomSheet';
@@ -29,6 +30,7 @@ type CafeSidebarProps = {
     panelRef: React.RefObject<HTMLDivElement | null>;
     formatDistance: (distanceMeters?: number) => string;
     isRatingPanelOpen?: boolean; // hides mobile bottom sheet when rating panel is open
+    onSelectAddress: (address: AddressSuggestion) => void;
 };
 
 export function CafeSidebar({
@@ -51,12 +53,111 @@ export function CafeSidebar({
     panelRef,
     formatDistance,
     isRatingPanelOpen = false,
+    onSelectAddress,
 }: CafeSidebarProps) {
     const [showFilterModal, setShowFilterModal] = useState(false);
     const { state, setSearchFilters, onSearch } = useAppStore();
     const { searchFilters, activeSearchQuery } = state;
     const isMobile = useIsMobile();
     const isTablet = useIsTablet();
+
+    // Autocomplete state
+    const [autocafes, setAutocafes] = useState<Cafe[]>([]);
+    const [autoAddresses, setAutoAddresses] = useState<AddressSuggestion[]>([]);
+    const [showDropdown, setShowDropdown] = useState(false);
+    const [isAutoSearching, setIsAutoSearching] = useState(false);
+    const debounceRef = useRef<NodeJS.Timeout | null>(null);
+    const abortRef = useRef<AbortController | null>(null);
+    const searchWrapperRef = useRef<HTMLDivElement>(null);
+
+    // Debounced autocomplete search
+    const runAutocomplete = useCallback(
+        (query: string) => {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+            if (abortRef.current) abortRef.current.abort();
+
+            if (query.trim().length < 2 || !userLocation) {
+                setAutocafes([]);
+                setAutoAddresses([]);
+                setShowDropdown(false);
+                return;
+            }
+
+            debounceRef.current = setTimeout(async () => {
+                const controller = new AbortController();
+                abortRef.current = controller;
+                setIsAutoSearching(true);
+
+                try {
+                    // Always search cafes in DB first
+                    const cafeRes = await fetch(
+                        `/api/cafes/search?q=${encodeURIComponent(query)}&lat=${userLocation.lat}&lng=${userLocation.lng}&sortBy=relevance`,
+                        { signal: controller.signal }
+                    );
+
+                    if (!cafeRes.ok) throw new Error('cafe search failed');
+                    const cafeData = await cafeRes.json();
+                    const cafeHits: Cafe[] = (cafeData.cafes || []).slice(0, 5);
+
+                    if (controller.signal.aborted) return;
+                    setAutocafes(cafeHits);
+
+                    // If < 3 cafe results, also geocode for addresses
+                    if (cafeHits.length < 3) {
+                        const geoRes = await fetch(
+                            `/api/geocode?q=${encodeURIComponent(query)}&lat=${userLocation.lat}&lng=${userLocation.lng}`,
+                            { signal: controller.signal }
+                        );
+                        if (geoRes.ok) {
+                            const geoData = await geoRes.json();
+                            if (!controller.signal.aborted) {
+                                setAutoAddresses(geoData.suggestions || []);
+                            }
+                        }
+                    } else {
+                        setAutoAddresses([]);
+                    }
+
+                    if (!controller.signal.aborted) {
+                        setShowDropdown(true);
+                    }
+                } catch (err: unknown) {
+                    if (err instanceof DOMException && err.name === 'AbortError') return;
+                    // Silently fail — user can still submit manually
+                } finally {
+                    if (!controller.signal.aborted) {
+                        setIsAutoSearching(false);
+                    }
+                }
+            }, 300);
+        },
+        [userLocation]
+    );
+
+    // Run autocomplete when search query changes
+    useEffect(() => {
+        runAutocomplete(searchQuery);
+        return () => {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+        };
+    }, [searchQuery, runAutocomplete]);
+
+    // Close dropdown when active search is set (user pressed Enter)
+    useEffect(() => {
+        if (activeSearchQuery) {
+            setShowDropdown(false);
+        }
+    }, [activeSearchQuery]);
+
+    const handleSelectCafe = (cafe: Cafe) => {
+        setShowDropdown(false);
+        onCafeClick(cafe);
+    };
+
+    const handleSelectAddress = (address: AddressSuggestion) => {
+        setShowDropdown(false);
+        onSelectAddress(address);
+    };
 
     // Check if any filters are active (not default values)
     const hasActiveFilters =
@@ -99,7 +200,7 @@ export function CafeSidebar({
 
                 <form onSubmit={onSearchSubmit} className="mb-3">
                     <div className="flex items-center gap-2">
-                        <div className="flex flex-row items-center border border-c2c-orange rounded-lg px-2 flex-1">
+                        <div ref={searchWrapperRef} className="flex flex-row items-center border border-c2c-orange rounded-lg px-2 flex-1 relative">
                             <svg
                                 xmlns="http://www.w3.org/2000/svg"
                                 className="h-4 w-4 text-c2c-orange pointer-events-none"
@@ -119,7 +220,7 @@ export function CafeSidebar({
                                         onSearchSubmit(e as unknown as React.FormEvent);
                                     }
                                 }}
-                                placeholder="Search cafes..."
+                                placeholder="Search cafes or an address..."
                                 className="w-full px-3 py-2 bg-transparent focus:outline-none focus:border-none focus:ring-0 text-sm placeholder-c2c-orange text-c2c-orange"
                                 disabled={!userLocation || isSearching}
                             />
@@ -133,9 +234,7 @@ export function CafeSidebar({
                                         initial={{ opacity: 0, scale: 0.8 }}
                                         animate={{ opacity: 1, scale: 1 }}
                                         exit={{ opacity: 0, scale: 0.8 }}
-                                        className="text-c2c-orange hover:text-c2c-orange-dark transition-colors min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
-                                        whileHover={{ scale: 1.1 }}
-                                        whileTap={{ scale: 0.9 }}
+                                        className="text-c2c-orange hover:text-c2c-orange-dark transition-all min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center hover:scale-110 active:scale-90"
                                     >
                                         <svg
                                             xmlns="http://www.w3.org/2000/svg"
@@ -150,68 +249,52 @@ export function CafeSidebar({
                                 )}
                             </AnimatePresence>
 
+                            {/* Autocomplete dropdown */}
+                            {showDropdown && (autocafes.length > 0 || autoAddresses.length > 0 || isAutoSearching) && (
+                                <SearchDropdown
+                                    cafeResults={autocafes}
+                                    addressResults={autoAddresses}
+                                    isLoading={isAutoSearching}
+                                    onSelectCafe={handleSelectCafe}
+                                    onSelectAddress={handleSelectAddress}
+                                    onClose={() => setShowDropdown(false)}
+                                />
+                            )}
+
                         </div>
-                        <motion.button
+                        <button
                             type="submit"
                             onClick={onSearchClick}
                             disabled={!userLocation || isSearching || !searchQuery.trim()}
-                            className="bg-c2c-orange hover:bg-c2c-orange-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center min-h-[44px]"
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            transition={{
-                                type: "spring",
-                                stiffness: 400,
-                                damping: 20
-                            }}
+                            className="bg-c2c-orange hover:bg-c2c-orange-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center min-h-[44px] transition-transform duration-150 hover:scale-105 active:scale-95"
                         >
                             Search
-                        </motion.button>
+                        </button>
                     </div>
                 </form>
 
                 {/* Search Around Me Button */}
                 <div className="flex gap-2">
-                    <motion.button
+                    <button
                         onClick={onSearchAround}
                         disabled={!userLocation || isSearching}
-                        className="bg-c2c-base hover:bg-c2c-base disabled:opacity-50 disabled:cursor-not-allowed border border-c2c-orange text-c2c-orange px-4 py-2 rounded text-sm font-medium flex items-center gap-2 flex-1 min-h-[44px]"
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
-                        transition={{
-                            type: "spring",
-                            stiffness: 400,
-                            damping: 20
-                        }}
+                        className="bg-c2c-base hover:bg-c2c-base disabled:opacity-50 disabled:cursor-not-allowed border border-c2c-orange text-c2c-orange px-4 py-2 rounded text-sm font-medium flex items-center gap-2 flex-1 min-h-[44px] transition-transform duration-150 hover:scale-[1.03] active:scale-[0.97]"
                     >
-                        <AnimatePresence mode="wait">
-                            {isSearching ? (
-                                <motion.div
-                                    key="searching"
-                                    initial={{ opacity: 0, scale: 0.8 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.8 }}
-                                    className="flex items-center gap-2"
-                                >
-                                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                    <span className="text-sm">Searching...</span>
-                                </motion.div>
-                            ) : (
-                                <motion.div
-                                    key="nearby"
-                                    initial={{ opacity: 0, scale: 0.8 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.8 }}
-                                    className="flex items-center gap-2"
-                                >
-                                    <MapPin className="h-4 w-4" />
-                                    <span className="text-sm">Nearby (2mi)</span>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </motion.button>
+                        {isSearching ? (
+                            <div className="flex items-center gap-2">
+                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span className="text-sm">Searching...</span>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                <MapPin className="h-4 w-4" />
+                                <span className="text-sm">Nearby (2mi)</span>
+                            </div>
+                        )}
+                    </button>
 
                     {/* Results count */}
                     <div className="bg-c2c-orange text-white px-3 py-2 rounded text-sm font-medium flex items-center">
@@ -230,17 +313,8 @@ export function CafeSidebar({
                     >
                         <Filter className="h-4 w-4" />
                         {hasActiveFilters && (
-                            <motion.span
-                                className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white rounded-full border-2 border-c2c-orange-dark"
-                                animate={{
-                                    scale: [1, 1.2, 1],
-                                    opacity: [1, 0.7, 1]
-                                }}
-                                transition={{
-                                    duration: 2,
-                                    repeat: Infinity,
-                                    ease: "easeInOut"
-                                }}
+                            <span
+                                className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white rounded-full border-2 border-c2c-orange-dark animate-pulse"
                             />
                         )}
                     </button>
@@ -406,29 +480,22 @@ export function CafeSidebar({
             </AnimatePresence>
 
             {/* Collapse/Expand Button */}
-            <motion.button
+            <button
                 onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     onToggle(!isCollapsed);
                 }}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-                transition={{
-                    type: "spring",
-                    stiffness: 400,
-                    damping: 25
-                }}
-                className="bg-c2c-base/95 border-2 border-c2c-orange p-3 rounded-full shadow-xl hover:bg-c2c-base shrink-0"
+                className="bg-c2c-base/95 border-2 border-c2c-orange p-3 rounded-full shadow-xl hover:bg-c2c-base shrink-0 transition-transform duration-150 hover:scale-110 active:scale-95"
                 aria-label={isCollapsed ? "Expand panel" : "Collapse panel"}
             >
-                <motion.div
-                    animate={{ rotate: isCollapsed ? 0 : 180 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                <div
+                    className="transition-transform duration-300"
+                    style={{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(180deg)' }}
                 >
                     <ChevronRight size={18} className="text-c2c-orange" />
-                </motion.div>
-            </motion.button>
+                </div>
+            </button>
 
             {/* Filter Modal */}
             <FilterModal

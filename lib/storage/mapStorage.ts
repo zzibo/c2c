@@ -1,4 +1,4 @@
-import type { Coordinate, Cafe } from '@/types/cafe';
+import type { Coordinate } from '@/types/cafe';
 import { MAX_AGE_MS } from './constants';
 
 interface MapViewState {
@@ -8,7 +8,6 @@ interface MapViewState {
     zoom: number;
   };
   userLocation: Coordinate | null;
-  cafes: Cafe[];
   searchQuery: string;
   isPanelCollapsed: boolean;
   timestamp: number;
