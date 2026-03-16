@@ -27,17 +27,17 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
             // Keep unused data in cache for 5 minutes
             gcTime: 5 * 60 * 1000,
 
-            // Refetch when user returns to window
-            refetchOnWindowFocus: true,
+            // Don't refetch on window focus (causes request storms)
+            refetchOnWindowFocus: false,
 
             // Refetch when network reconnects
             refetchOnReconnect: true,
 
-            // Retry failed requests 3 times
-            retry: 3,
+            // Retry failed requests once
+            retry: 1,
 
-            // Exponential backoff: 1s, 2s, 4s
-            retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+            // Exponential backoff: 1s, 2s
+            retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
           },
           mutations: {
             // Retry mutations once

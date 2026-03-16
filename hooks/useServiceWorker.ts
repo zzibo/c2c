@@ -17,7 +17,14 @@ export function useServiceWorker() {
     }
 
     // In development, Serwist is disabled via next.config.ts
+    // Also unregister any stale SWs from previous production builds
     if (process.env.NODE_ENV === "development") {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((reg) => reg.unregister());
+      });
+      caches.keys().then((keys) => {
+        keys.forEach((key) => caches.delete(key));
+      });
       setStatus("unsupported");
       return;
     }
