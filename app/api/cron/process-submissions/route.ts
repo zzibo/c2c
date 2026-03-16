@@ -56,6 +56,56 @@ function getSupabaseClient() {
 }
 
 /**
+ * Log a cron run to the cron_logs table.
+ * Failures here must not crash the cron — they are caught and logged to console.
+ */
+async function logCronRun(params: {
+  status: 'success' | 'error' | 'skipped';
+  startedAt: Date;
+  cafesProcessed?: number;
+  cafesApproved?: number;
+  cafesRejected?: number;
+  cafesFlagged?: number;
+  errors?: number;
+  claudeApiCalls?: number;
+  skipReason?: string;
+  errorMessage?: string;
+  dailyQuotaUsed?: number;
+  dailyQuotaLimit?: number;
+  details?: unknown;
+}): Promise<void> {
+  try {
+    const supabase = getSupabaseClient();
+    const completedAt = new Date();
+    const executionTimeMs = completedAt.getTime() - params.startedAt.getTime();
+
+    const { error } = await supabase.from('cron_logs').insert({
+      status: params.status,
+      started_at: params.startedAt.toISOString(),
+      completed_at: completedAt.toISOString(),
+      execution_time_ms: executionTimeMs,
+      cafes_processed: params.cafesProcessed ?? 0,
+      cafes_approved: params.cafesApproved ?? 0,
+      cafes_rejected: params.cafesRejected ?? 0,
+      cafes_flagged: params.cafesFlagged ?? 0,
+      errors: params.errors ?? 0,
+      claude_api_calls: params.claudeApiCalls ?? 0,
+      skip_reason: params.skipReason ?? null,
+      error_message: params.errorMessage ?? null,
+      daily_quota_used: params.dailyQuotaUsed ?? null,
+      daily_quota_limit: params.dailyQuotaLimit ?? null,
+      details: params.details ?? null,
+    });
+
+    if (error) {
+      console.error('[CRON] Failed to write cron log:', error.message);
+    }
+  } catch (err) {
+    console.error('[CRON] Failed to write cron log:', err);
+  }
+}
+
+/**
  * Get the number of cafes already processed today
  */
 async function getDailyProcessedCount(): Promise<number> {
@@ -84,14 +134,20 @@ async function getDailyProcessedCount(): Promise<number> {
 }
 
 export async function GET(req: NextRequest) {
-  const startTime = Date.now();
-  const timestamp = new Date().toISOString();
+  const startedAt = new Date();
+  const startTime = startedAt.getTime();
+  const timestamp = startedAt.toISOString();
 
   // ========================================================================
   // SAFEGUARD 1: Kill switch - disable AI processing entirely
   // ========================================================================
   if (isAIDisabled()) {
     console.log('[CRON] AI processing is DISABLED via DISABLE_CRON_AI');
+    await logCronRun({
+      status: 'skipped',
+      startedAt,
+      skipReason: 'AI processing disabled via kill switch',
+    });
     return NextResponse.json({
       success: true,
       skipped: true,
@@ -108,6 +164,11 @@ export async function GET(req: NextRequest) {
 
   if (!process.env.CRON_SECRET) {
     console.error('[CRON] CRON_SECRET not configured');
+    await logCronRun({
+      status: 'error',
+      startedAt,
+      errorMessage: 'CRON_SECRET not configured',
+    });
     return NextResponse.json(
       { error: 'Cron not configured', timestamp },
       { status: 500 }
@@ -116,6 +177,7 @@ export async function GET(req: NextRequest) {
 
   if (authHeader !== expectedAuth) {
     console.warn('[CRON] Unauthorized cron request attempt');
+    // Don't log unauthorized attempts — not a real cron run
     return NextResponse.json(
       { error: 'Unauthorized', timestamp },
       { status: 401 }
@@ -132,6 +194,13 @@ export async function GET(req: NextRequest) {
 
   if (remainingQuota === 0) {
     console.log('[CRON] Daily limit reached. Skipping processing.');
+    await logCronRun({
+      status: 'skipped',
+      startedAt,
+      skipReason: `Daily limit of ${MAX_DAILY_CAFES} cafes already reached`,
+      dailyQuotaUsed: alreadyProcessed,
+      dailyQuotaLimit: MAX_DAILY_CAFES,
+    });
     return NextResponse.json({
       success: true,
       skipped: true,
@@ -191,16 +260,40 @@ export async function GET(req: NextRequest) {
     console.log(`[CRON] Results: ${summary.approved} approved, ${summary.rejected} rejected, ${summary.flagged} flagged`);
     console.log(`[CRON] API calls made: ${summary.claudeApiCalls}`);
 
+    await logCronRun({
+      status: 'success',
+      startedAt,
+      cafesProcessed: summary.totalProcessed,
+      cafesApproved: summary.approved,
+      cafesRejected: summary.rejected,
+      cafesFlagged: summary.flagged,
+      errors: summary.errors,
+      claudeApiCalls: summary.claudeApiCalls,
+      dailyQuotaUsed: alreadyProcessed + summary.totalProcessed,
+      dailyQuotaLimit: MAX_DAILY_CAFES,
+      details: summary.totalProcessed > 0 ? summary.results : null,
+    });
+
     return NextResponse.json(response);
 
   } catch (error) {
     const executionTime = Date.now() - startTime;
     console.error('[CRON] Error processing submissions:', error);
 
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+    await logCronRun({
+      status: 'error',
+      startedAt,
+      errorMessage,
+      dailyQuotaUsed: alreadyProcessed,
+      dailyQuotaLimit: MAX_DAILY_CAFES,
+    });
+
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
         timestamp,
         executionTimeMs: executionTime,
         dailyQuota: {
