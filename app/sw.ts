@@ -33,8 +33,8 @@ const serwist = new Serwist({
         cacheName: "mapbox-tiles-v1",
         plugins: [
           new ExpirationPlugin({
-            maxEntries: 500,
-            maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
+            maxEntries: 200,
+            maxAgeSeconds: 3 * 24 * 60 * 60, // 3 days
           }),
           new CacheableResponsePlugin({
             statuses: [0, 200],
