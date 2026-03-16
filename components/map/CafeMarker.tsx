@@ -26,33 +26,15 @@ export const CafeMarker = React.memo(function CafeMarker({ cafe, isSelected, zoo
   const iconSize = Math.round(24 * zoomScale);
   const iconTop = Math.round(8 * zoomScale);
 
-  // Update tooltip position continuously while hovered (handles map movement/zoom)
+  // Update tooltip position once when hovered
   useEffect(() => {
     if (!isHovered || !markerRef.current) return;
 
-    const updatePosition = () => {
-      if (markerRef.current) {
-        const rect = markerRef.current.getBoundingClientRect();
-        setTooltipPosition({
-          top: rect.top - 10, // Position above the marker
-          left: rect.left + rect.width / 2, // Center horizontally
-        });
-      }
-    };
-
-    // Update immediately
-    updatePosition();
-
-    // Update on scroll/zoom/move
-    const interval = setInterval(updatePosition, 100);
-    window.addEventListener('scroll', updatePosition, true);
-    window.addEventListener('resize', updatePosition);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('scroll', updatePosition, true);
-      window.removeEventListener('resize', updatePosition);
-    };
+    const rect = markerRef.current.getBoundingClientRect();
+    setTooltipPosition({
+      top: rect.top - 10,
+      left: rect.left + rect.width / 2,
+    });
   }, [isHovered]);
 
   return (
