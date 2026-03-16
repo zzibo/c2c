@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 import Map, { Marker, NavigationControl, GeolocateControl } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useQuery } from '@tanstack/react-query';
-import type { Coordinate, Cafe } from '@/types/cafe';
+import type { Coordinate, Cafe, AddressSuggestion } from '@/types/cafe';
 import { CafeSidebar } from '@/components/map/CafeSidebar';
 import { CafeMarker } from '@/components/map/CafeMarker';
 import { useAppStore } from '@/lib/store/AppStore';
@@ -48,13 +48,16 @@ export default function MapView({
   // Load persisted state from localStorage (but skip if simulation is enabled)
   const persistedState = simulateLocation === 'sg' ? null : loadMapState();
   
-  const [viewState, setViewStateInternal] = useState({
+  // Use a ref for viewState to avoid re-rendering on every map frame (60fps).
+  // The Map component manages its own state via initialViewState (uncontrolled mode).
+  const viewStateRef = useRef({
     longitude: persistedState?.viewState?.longitude ?? initialCenter.lng,
     latitude: persistedState?.viewState?.latitude ?? initialCenter.lat,
     zoom: persistedState?.viewState?.zoom ?? initialZoom
   });
+  // Lightweight zoom state — only updated on zoomend (once per zoom gesture, not per frame)
+  const [currentZoom, setCurrentZoom] = useState(viewStateRef.current.zoom);
   const [userLocation, setUserLocationInternal] = useState<Coordinate | null>(persistedState?.userLocation ?? null);
-  const [cafes, setCafesInternal] = useState<Cafe[]>(persistedState?.cafes ?? []);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [selectedCafeId, setSelectedCafeId] = useState<string | null>(null);
   const [selectedCafeForRating, setSelectedCafeForRating] = useState<Cafe | null>(null);
@@ -79,8 +82,8 @@ export default function MapView({
   } | null>(null);
 
   // Use AppStore for global state management (replaces SearchContext + SidebarContext)
-  const { state, setSearchQuery, setActiveSearchQuery, setPanelCollapsed, registerSearchHandler, setAddCafeMode } = useAppStore();
-  const { searchQuery: searchQueryContext, activeSearchQuery, isPanelCollapsed, searchFilters, isAddCafeMode } = state;
+  const { state, setSearchQuery, setActiveSearchQuery, setPanelCollapsed, registerSearchHandler, setAddCafeMode, setSearchedAddress, clearSearch } = useAppStore();
+  const { searchQuery: searchQueryContext, activeSearchQuery, isPanelCollapsed, searchFilters, isAddCafeMode, searchedAddress } = state;
   const { showToast } = useToast();
 
   // Clear dropped pin when exiting add cafe mode
@@ -152,11 +155,6 @@ export default function MapView({
     queryFn: async () => {
       if (!mapBounds) return { cafes: [] };
 
-      console.log('🗺️ VIEWPORT QUERY TRIGGERED:', {
-        bounds: mapBounds,
-        activeSearchQuery
-      });
-
       // Build query string with filters
       const params = new URLSearchParams({
         north: mapBounds.north.toString(),
@@ -186,12 +184,10 @@ export default function MapView({
 
       if (!response.ok) {
         const data = await response.json();
-        console.error('❌ Viewport API error:', data);
         throw new Error(data.error || 'Failed to fetch cafes');
       }
 
       const result = await response.json();
-      console.log('✅ Viewport API response:', result);
       return result;
     },
     enabled: !!mapBounds && !activeSearchQuery,  // Only fetch when NOT searching
@@ -200,7 +196,7 @@ export default function MapView({
   });
 
   // Determine which cafes to display based on active query
-  const displayedCafes = useMemo(() => {
+  const displayedCafes: Cafe[] = useMemo(() => {
     if (activeSearchQuery && searchData?.cafes) {
       return searchData.cafes;
     }
@@ -209,11 +205,6 @@ export default function MapView({
     }
     return [];
   }, [activeSearchQuery, searchData, viewportData]);
-
-  // Update cafes when displayed data changes
-  useEffect(() => {
-    setCafes(displayedCafes);
-  }, [displayedCafes]);
 
   // Sync search error state and show toast on successful search
   useEffect(() => {
@@ -237,7 +228,6 @@ export default function MapView({
   // Handle viewport errors
   useEffect(() => {
     if (viewportError) {
-      console.error('Viewport fetch error:', viewportError);
       setSearchError(viewportError instanceof Error ? viewportError.message : 'Failed to load cafes');
     }
   }, [viewportError]);
@@ -250,47 +240,40 @@ export default function MapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Use refs to track current values for saving
-  const viewStateRef = useRef(viewState);
+  // Refs to track current values for saving (avoids re-renders)
   const userLocationRef = useRef(userLocation);
-  const cafesRef = useRef(cafes);
   const isPanelCollapsedRef = useRef(isPanelCollapsed);
   const searchQueryRef = useRef(searchQueryContext);
 
   // Update refs when state changes
-  viewStateRef.current = viewState;
   userLocationRef.current = userLocation;
-  cafesRef.current = cafes;
   isPanelCollapsedRef.current = isPanelCollapsed;
   searchQueryRef.current = searchQueryContext;
 
   // Debounce timer for saving state
   const saveStateTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const DEBOUNCE_DELAY = 500; // Save 500ms after user stops interacting
+  const DEBOUNCE_DELAY = 500;
 
   // Helper function to save state
-  const saveState = () => {
+  const saveState = useCallback(() => {
     saveMapState({
       viewState: viewStateRef.current,
       userLocation: userLocationRef.current,
-      cafes: cafesRef.current,
       searchQuery: searchQueryRef.current,
       isPanelCollapsed: isPanelCollapsedRef.current
     });
-  };
+  }, []);
 
   // Debounced save function
   const debouncedSaveState = useCallback(() => {
-    // Clear existing timer
     if (saveStateTimerRef.current) {
       clearTimeout(saveStateTimerRef.current);
     }
-    // Set new timer
     saveStateTimerRef.current = setTimeout(() => {
       saveState();
       saveStateTimerRef.current = null;
     }, DEBOUNCE_DELAY);
-  }, []);
+  }, [saveState]);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -301,43 +284,30 @@ export default function MapView({
     };
   }, []);
 
-  // Wrapper setters that save automatically
-  const setViewState = (value: typeof viewState | ((prev: typeof viewState) => typeof viewState)) => {
-    setViewStateInternal(value);
-    debouncedSaveState(); // Debounced save to avoid excessive writes
-  };
-
+  // setUserLocation wrapper that also saves
   const setUserLocation = (value: Coordinate | null | ((prev: Coordinate | null) => Coordinate | null)) => {
     setUserLocationInternal(value);
-    debouncedSaveState();
-  };
-
-  const setCafes = (value: Cafe[] | ((prev: Cafe[]) => Cafe[])) => {
-    setCafesInternal(value);
     debouncedSaveState();
   };
 
   // Save when searchQuery changes (from context) - debounced
   useEffect(() => {
     debouncedSaveState();
-  }, [searchQueryContext, debouncedSaveState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQueryContext]);
 
   useEffect(() => {
     // Check for simulated location (for testing) - check BEFORE checking persisted location
     const simulateLocation = process.env.NEXT_PUBLIC_SIMULATE_LOCATION;
-    console.log('Simulate location env var:', simulateLocation); // Debug log
     if (simulateLocation === 'sg') {
-      // Singapore coordinates (Marina Bay area)
       const singaporeCoords = { lat: 1.3521, lng: 103.8198 };
-      console.log('✅ Simulating location: Singapore', singaporeCoords);
       setUserLocation(singaporeCoords);
-      setSearchError(null); // Clear any location errors
-      if (cafes.length === 0) {
-        setViewState({
-          longitude: singaporeCoords.lng,
-          latitude: singaporeCoords.lat,
-          zoom: 15
-        });
+      setSearchError(null);
+      if (!persistedState?.viewState) {
+        const map = mapRef.current?.getMap();
+        if (map) {
+          map.flyTo({ center: [singaporeCoords.lng, singaporeCoords.lat], zoom: 15, duration: 1000 });
+        }
       }
       return;
     }
@@ -347,7 +317,7 @@ export default function MapView({
       // Already have location from persistence, skip geolocation
       return;
     }
-    
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -355,15 +325,13 @@ export default function MapView({
             lat: position.coords.latitude,
             lng: position.coords.longitude
           };
-          console.log('User location obtained:', coords);
           setUserLocation(coords);
-          // Only update viewState if we don't have persisted cafes (meaning it's a fresh load)
-          if (cafes.length === 0) {
-            setViewState({
-              longitude: coords.lng,
-              latitude: coords.lat,
-              zoom: 15
-            });
+          // Only fly to user location if no persisted viewState (fresh visitor)
+          if (!persistedState?.viewState) {
+            const map = mapRef.current?.getMap();
+            if (map) {
+              map.flyTo({ center: [coords.lng, coords.lat], zoom: 15, duration: 1000 });
+            }
           }
         },
         (error) => {
@@ -397,16 +365,13 @@ export default function MapView({
       console.error('Geolocation is not supported by this browser.');
       setSearchError('Geolocation is not supported by your browser.');
     }
-  }, [userLocation, cafes]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userLocation]);
 
   // Debounced function to update map bounds (avoid API spam during pan/zoom)
   const updateMapBounds = useCallback(() => {
     const map = mapRef.current?.getMap();
-    if (!map) {
-      console.log('⚠️ updateMapBounds: map not ready');
-      return;
-      
-    }
+    if (!map) return;
 
     const bounds = map.getBounds();
     const newBounds = {
@@ -415,8 +380,6 @@ export default function MapView({
       east: bounds.getEast(),
       west: bounds.getWest(),
     };
-
-    console.log('📍 Updating map bounds:', newBounds);
 
     // NEVER automatically clear search when map moves
     // Search mode can only be exited by clicking "Nearby" or "X" button
@@ -431,7 +394,7 @@ export default function MapView({
         if (timeoutId) clearTimeout(timeoutId);
         timeoutId = setTimeout(() => {
           updateMapBounds();
-        }, 300);
+        }, 1000);
       };
     },
     [updateMapBounds]
@@ -448,46 +411,44 @@ export default function MapView({
       if (!map) {
         pollCount++;
         if (pollCount < maxPolls) {
-          console.log(`⏳ Map not ready yet (attempt ${pollCount}/${maxPolls}), retrying...`);
           setTimeout(setupMapListeners, 100);
-        } else {
-          console.error('❌ Map failed to initialize after 2 seconds');
         }
         return;
       }
 
-      console.log('✅ Map ref ready, setting up bounds listeners');
-
       // Set initial bounds when map loads
       const handleMapLoad = () => {
-        console.log('🗺️ Map loaded event - setting initial bounds');
         updateMapBounds();
       };
 
       // Update bounds when user pans or zooms
       const handleMapMove = () => {
-        console.log('🔄 Map moved - debouncing bounds update');
         debouncedUpdateMapBounds();
+      };
+
+      // Track zoom level for marker sizing (only fires once per zoom gesture)
+      const handleZoomEnd = () => {
+        setCurrentZoom(map.getZoom());
       };
 
       // If map is already loaded, set bounds immediately
       if (map.loaded()) {
-        console.log('🗺️ Map already loaded - setting bounds immediately');
         updateMapBounds();
       } else {
-        console.log('⏳ Waiting for map load event...');
         map.once('load', handleMapLoad);
       }
 
       // Listen for map movement
       map.on('moveend', handleMapMove);
       map.on('zoomend', handleMapMove);
+      map.on('zoomend', handleZoomEnd);
 
       // Cleanup function
       return () => {
         map.off('load', handleMapLoad);
         map.off('moveend', handleMapMove);
         map.off('zoomend', handleMapMove);
+        map.off('zoomend', handleZoomEnd);
       };
     };
 
@@ -522,33 +483,15 @@ export default function MapView({
     return () => clearTimeout(timer);
   }, [isPanelCollapsed]);
 
-  // Update dropped pin tooltip position continuously while hovered
+  // Update dropped pin tooltip position once when hovered
   useEffect(() => {
     if (!isDroppedPinHovered || !droppedPinRef.current) return;
 
-    const updatePosition = () => {
-      if (droppedPinRef.current) {
-        const rect = droppedPinRef.current.getBoundingClientRect();
-        setDroppedPinTooltipPosition({
-          top: rect.top - 10, // Position above the marker
-          left: rect.left + rect.width / 2, // Center horizontally
-        });
-      }
-    };
-
-    // Update immediately
-    updatePosition();
-
-    // Update on scroll/zoom/move
-    const interval = setInterval(updatePosition, 100);
-    window.addEventListener('scroll', updatePosition, true);
-    window.addEventListener('resize', updatePosition);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('scroll', updatePosition, true);
-      window.removeEventListener('resize', updatePosition);
-    };
+    const rect = droppedPinRef.current.getBoundingClientRect();
+    setDroppedPinTooltipPosition({
+      top: rect.top - 10,
+      left: rect.left + rect.width / 2,
+    });
   }, [isDroppedPinHovered]);
 
   // Helper function: Calculate distance between two points (Haversine formula)
@@ -569,10 +512,10 @@ export default function MapView({
 
   // Calculate distances and sort cafes by distance from user
   const cafesWithDistance = useMemo(() => {
-    if (!userLocation) return cafes;
+    if (!userLocation) return displayedCafes;
 
-    return cafes
-      .map((cafe) => ({
+    return displayedCafes
+      .map((cafe: Cafe) => ({
         ...cafe,
         distance: calculateDistance(
           userLocation.lat,
@@ -581,8 +524,18 @@ export default function MapView({
           cafe.location.lng
         ),
       }))
-      .sort((a, b) => (a.distance || 0) - (b.distance || 0));
-  }, [cafes, userLocation, calculateDistance]);
+      .sort((a: Cafe, b: Cafe) => (a.distance || 0) - (b.distance || 0));
+  }, [displayedCafes, userLocation, calculateDistance]);
+
+  // Memoize marker lists to prevent array recreation on every render
+  const nonSelectedCafes = useMemo(
+    () => displayedCafes.filter((cafe: Cafe) => cafe.id !== selectedCafeId),
+    [displayedCafes, selectedCafeId]
+  );
+  const selectedCafe = useMemo(
+    () => selectedCafeId ? displayedCafes.find((cafe: Cafe) => cafe.id === selectedCafeId) : null,
+    [displayedCafes, selectedCafeId]
+  );
 
   // Function to search for cafes around user location
   const searchAroundMe = useCallback(async () => {
@@ -614,16 +567,12 @@ export default function MapView({
 
           if (response.ok) {
       const data = await response.json();
-            console.log('Cafes in database nearby:', data.count);
-
             if (data.count === 0) {
-              // No cafes found - show modal
-              console.log('No cafes nearby - showing modal');
               setShowNoCafesModal(true);
             }
           }
-    } catch (error) {
-          console.error('Error checking nearby cafes:', error);
+    } catch {
+          // Silently fail — user can still search manually
         }
       };
 
@@ -651,9 +600,11 @@ export default function MapView({
 
     // Trigger search query by setting activeSearchQuery
     setActiveSearchQuery(query);
-      setSelectedCafeId(null);
+    setSelectedCafeId(null);
+    // Clear address pin when doing a name search
+    setSearchedAddress(null);
 
-  }, [userLocation]);
+  }, [userLocation, setSearchedAddress]);
 
   // Register search handler with SearchContext so AppHeader can trigger searches
   useEffect(() => {
@@ -709,23 +660,40 @@ export default function MapView({
     setSearchError(null);
     // Clear active search (triggers viewport mode)
     setActiveSearchQuery(null);
+    // Clear address pin
+    setSearchedAddress(null);
     // Force update map bounds to reload viewport cafes
     updateMapBounds();
-  }, [setSearchQuery, setActiveSearchQuery, updateMapBounds]);
+  }, [setSearchQuery, setActiveSearchQuery, setSearchedAddress, updateMapBounds]);
+
+  // Handle address selection from autocomplete dropdown
+  const handleSelectAddress = useCallback((address: AddressSuggestion) => {
+    // Set the address pin in global state
+    setSearchedAddress(address);
+    // Clear active search query so viewport mode takes over
+    setActiveSearchQuery(null);
+    // Update the search input to show the address
+    setSearchQuery(address.label);
+    setSearchError(null);
+
+    // Fly map to the address location
+    const map = mapRef.current?.getMap();
+    if (map) {
+      map.flyTo({
+        center: [address.lng, address.lat],
+        zoom: 15,
+        duration: 1000,
+      });
+    }
+  }, [setSearchedAddress, setActiveSearchQuery, setSearchQuery]);
 
   // Handle "Search for cafes" confirmation from modal
   const handleSearchGeoapify = useCallback(async () => {
     if (!userLocation) return;
 
     setIsSearchingGeoapify(true);
-    console.log('User confirmed - searching Geoapify for nearby cafes...');
 
     try {
-      // Call the /api/cafes/nearby endpoint which will:
-      // 1. Check database
-      // 2. If < 10 cafes, fetch from Geoapify
-      // 3. Populate database
-      // 4. Return cafes
       const response = await fetch(
         `/api/cafes/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}`
       );
@@ -735,16 +703,12 @@ export default function MapView({
       }
 
       const data = await response.json();
-      console.log('Fetched cafes from Geoapify:', data.count);
-
-      // Update map bounds to trigger viewport query and display new cafes
       updateMapBounds();
 
       if (data.count === 0) {
         setSearchError('No cafes found in this area. Try a different location.');
       }
-    } catch (error) {
-      console.error('Error fetching from Geoapify:', error);
+    } catch {
       setSearchError('Failed to search for cafes. Please try again.');
     } finally {
       setIsSearchingGeoapify(false);
@@ -756,18 +720,18 @@ export default function MapView({
     const map = mapRef.current?.getMap();
     if (map) {
       const bottomPadding = isMobile ? window.innerHeight * 0.5 : 0;
+      const currentZoom = map.getZoom();
       map.flyTo({
         center: [cafe.location.lng, cafe.location.lat],
-        zoom: Math.max(viewState.zoom, 15),
+        zoom: Math.max(currentZoom, 15),
         padding: { top: 0, bottom: bottomPadding, left: 0, right: 0 },
         duration: 1000,
       });
     }
-  }, [isMobile, viewState.zoom]);
+  }, [isMobile]);
 
   // Handle cafe panel item click - open rating panel
   const handleCafeClick = (cafe: Cafe) => {
-    console.log('Opening rating panel for:', cafe.name);
     setSelectedCafeId(cafe.id);
     setSelectedCafeForRating(cafe);
     setShowRatingPanel(true);
@@ -786,7 +750,6 @@ export default function MapView({
   // Handle pin click - open rating panel and scroll panel to cafe
   const handlePinClick = (cafe: Cafe, e: React.MouseEvent) => {
     e.stopPropagation();
-    console.log('Opening rating panel for:', cafe.name);
     setSelectedCafeId(cafe.id);
     setSelectedCafeForRating(cafe);
     setShowRatingPanel(true);
@@ -816,12 +779,6 @@ export default function MapView({
       return `${Math.round(distanceMeters)} ft`;
     }
     return `${miles.toFixed(2)} mi`;
-  };
-
-  // Format hours helper
-  const formatHours = (hoursText?: string): string => {
-    if (!hoursText) return 'Hours not available';
-    return hoursText;
   };
 
   // Handle adding a user-submitted cafe
@@ -865,14 +822,21 @@ export default function MapView({
       <div className="absolute inset-0">
         <Map
           ref={mapRef}
-          {...viewState}
-          onMove={evt => setViewState(evt.viewState)}
+          initialViewState={viewStateRef.current}
+          onMoveEnd={evt => {
+            // Update ref for persistence (no re-render)
+            viewStateRef.current = {
+              longitude: evt.viewState.longitude,
+              latitude: evt.viewState.latitude,
+              zoom: evt.viewState.zoom,
+            };
+            debouncedSaveState();
+          }}
           onClick={(evt) => {
             // Handle map click for dropping pin in add cafe mode
             if (isAddCafeMode) {
               const { lng, lat } = evt.lngLat;
               setDroppedPinLocation({ lng, lat });
-              console.log('Pin dropped at:', { lng, lat });
             }
           }}
           cursor={isAddCafeMode ? 'crosshair' : 'default'}
@@ -914,7 +878,7 @@ export default function MapView({
             >
               <div className="relative">
                 {/* Pulsing circle effect */}
-                <div className="absolute -inset-3 bg-c2c-orange rounded-full opacity-30 animate-ping" />
+                <div className="absolute -inset-3 bg-c2c-orange rounded-full opacity-20 animate-pulse" />
                 {/* Center dot */}
                 <div className="w-5 h-5 bg-c2c-orange rounded-full border-3 border-white shadow-lg relative z-10" />
               </div>
@@ -922,27 +886,50 @@ export default function MapView({
           )}
 
           {/* Cafe markers - render non-selected first, then selected last so it's always on top */}
-          {cafes
-            .filter((cafe) => cafe.id !== selectedCafeId)
-            .map((cafe) => (
-              <CafeMarker
-                key={cafe.id}
-                cafe={cafe}
-                isSelected={false}
-                zoom={viewState.zoom}
-                onClick={handlePinClick}
-              />
-            ))}
-          
-          {/* Selected marker rendered last - ensures it's always on top */}
-          {selectedCafeId && cafes.find((cafe) => cafe.id === selectedCafeId) && (
+          {nonSelectedCafes.map((cafe) => (
             <CafeMarker
-              key={`selected-${selectedCafeId}`}
-              cafe={cafes.find((cafe) => cafe.id === selectedCafeId)!}
-              isSelected={true}
-              zoom={viewState.zoom}
+              key={cafe.id}
+              cafe={cafe}
+              isSelected={false}
+              zoom={currentZoom}
               onClick={handlePinClick}
             />
+          ))}
+
+          {/* Selected marker rendered last - ensures it's always on top */}
+          {selectedCafe && (
+            <CafeMarker
+              key={`selected-${selectedCafeId}`}
+              cafe={selectedCafe}
+              isSelected={true}
+              zoom={currentZoom}
+              onClick={handlePinClick}
+            />
+          )}
+
+          {/* Address search pin */}
+          {searchedAddress && (
+            <Marker
+              longitude={searchedAddress.lng}
+              latitude={searchedAddress.lat}
+              anchor="bottom"
+              style={{ zIndex: 25 }}
+            >
+              <div className="flex flex-col items-center">
+                <MapPin
+                  size={40}
+                  className="drop-shadow-lg"
+                  fill="#f4512c"
+                  stroke="#e64524"
+                  strokeWidth={1.5}
+                />
+                <div className="mt-1 px-2 py-0.5 bg-white border border-gray-300 rounded shadow-sm max-w-[200px]">
+                  <p className="text-xs text-gray-700 truncate font-medium">
+                    {searchedAddress.label}
+                  </p>
+                </div>
+              </div>
+            </Marker>
           )}
 
           {/* Dropped pin for adding new cafe */}
@@ -964,7 +951,7 @@ export default function MapView({
                   {/* Calculate pin size based on zoom level */}
                   {(() => {
                     const baseSize = 50;
-                    const zoomScale = Math.max(0.8, Math.min(1.5, viewState.zoom / 13));
+                    const zoomScale = Math.max(0.8, Math.min(1.5, currentZoom / 13));
                     const pinSize = baseSize * zoomScale;
                     const iconSize = Math.round(24 * zoomScale);
                     const iconTop = Math.round(8 * zoomScale);
@@ -1050,6 +1037,7 @@ export default function MapView({
           panelRef={panelRef}
           formatDistance={formatDistance}
           isRatingPanelOpen={showRatingPanel}
+          onSelectAddress={handleSelectAddress}
         />
       )}
 
