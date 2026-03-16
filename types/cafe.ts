@@ -104,3 +104,9 @@ export interface Rating {
 export interface RatingWithUser extends Rating {
   username: string;
 }
+
+export interface AddressSuggestion {
+  label: string;
+  lat: number;
+  lng: number;
+}
