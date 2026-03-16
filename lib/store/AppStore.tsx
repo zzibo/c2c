@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useReducer, ReactNode, useCallback, useRef } from 'react';
+import type { AddressSuggestion } from '@/types/cafe';
 
 // Search filters interface
 export interface SearchFilters {
@@ -33,6 +34,7 @@ interface AppState {
   searchFilters: SearchFilters; // Search filter preferences
 
   isAddCafeMode: boolean;
+  searchedAddress: AddressSuggestion | null;
 }
 
 // Action types
@@ -42,7 +44,8 @@ type AppAction =
   | { type: 'SET_ACTIVE_SEARCH_QUERY'; payload: string | null }
   | { type: 'SET_SEARCH_FILTERS'; payload: SearchFilters }
   | { type: 'CLEAR_SEARCH' }
-  | { type: 'SET_ADD_CAFE_MODE'; payload: boolean };
+  | { type: 'SET_ADD_CAFE_MODE'; payload: boolean }
+  | { type: 'SET_SEARCHED_ADDRESS'; payload: AddressSuggestion | null };
 
 // Default filters (exported for use in FilterModal and other components)
 export const defaultFilters: SearchFilters = {
@@ -71,6 +74,7 @@ const initialState: AppState = {
   activeSearchQuery: null,
   searchFilters: defaultFilters,
   isAddCafeMode: false,
+  searchedAddress: null,
 };
 
 // Reducer
@@ -89,10 +93,13 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, searchFilters: action.payload };
 
     case 'CLEAR_SEARCH':
-      return { ...state, searchQuery: '', activeSearchQuery: null };
+      return { ...state, searchQuery: '', activeSearchQuery: null, searchedAddress: null };
 
     case 'SET_ADD_CAFE_MODE':
       return { ...state, isAddCafeMode: action.payload };
+
+    case 'SET_SEARCHED_ADDRESS':
+      return { ...state, searchedAddress: action.payload };
 
     default:
       return state;
@@ -110,6 +117,7 @@ interface AppContextType {
   setSearchFilters: (filters: SearchFilters) => void;
   clearSearch: () => void;
   setAddCafeMode: (isAddMode: boolean) => void;
+  setSearchedAddress: (address: AddressSuggestion | null) => void;
   // Search handler registration (for component communication)
   registerSearchHandler: (handler: (query: string) => void) => void;
   onSearch: (query: string) => void;
@@ -186,6 +194,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_ADD_CAFE_MODE', payload: isAddMode });
   }, []);
 
+  const setSearchedAddress = useCallback((address: AddressSuggestion | null) => {
+    dispatch({ type: 'SET_SEARCHED_ADDRESS', payload: address });
+  }, []);
+
   // Search handler registration
   const registerSearchHandler = useCallback((handler: (query: string) => void) => {
     searchHandlerRef.current = handler;
@@ -207,6 +219,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setSearchFilters,
     clearSearch,
     setAddCafeMode,
+    setSearchedAddress,
     registerSearchHandler,
     onSearch,
   };
