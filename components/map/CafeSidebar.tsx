@@ -129,7 +129,7 @@ export function CafeSidebar({
                         setIsAutoSearching(false);
                     }
                 }
-            }, 300);
+            }, 100);
         },
         [userLocation]
     );
