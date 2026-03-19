@@ -89,31 +89,28 @@ export function CafeSidebar({
                 setIsAutoSearching(true);
 
                 try {
-                    // Always search cafes in DB first
-                    const cafeRes = await fetch(
-                        `/api/cafes/search?q=${encodeURIComponent(query)}&lat=${userLocation.lat}&lng=${userLocation.lng}&sortBy=relevance`,
-                        { signal: controller.signal }
-                    );
+                    // Run cafe search and address geocode in parallel
+                    const [cafeRes, geoRes] = await Promise.all([
+                        fetch(
+                            `/api/cafes/search?q=${encodeURIComponent(query)}&lat=${userLocation.lat}&lng=${userLocation.lng}&sortBy=relevance`,
+                            { signal: controller.signal }
+                        ),
+                        fetch(
+                            `/api/geocode?q=${encodeURIComponent(query)}&lat=${userLocation.lat}&lng=${userLocation.lng}`,
+                            { signal: controller.signal }
+                        ),
+                    ]);
+
+                    if (controller.signal.aborted) return;
 
                     if (!cafeRes.ok) throw new Error('cafe search failed');
                     const cafeData = await cafeRes.json();
                     const cafeHits: Cafe[] = (cafeData.cafes || []).slice(0, 5);
-
-                    if (controller.signal.aborted) return;
                     setAutocafes(cafeHits);
 
-                    // If < 3 cafe results, also geocode for addresses
-                    if (cafeHits.length < 3) {
-                        const geoRes = await fetch(
-                            `/api/geocode?q=${encodeURIComponent(query)}&lat=${userLocation.lat}&lng=${userLocation.lng}`,
-                            { signal: controller.signal }
-                        );
-                        if (geoRes.ok) {
-                            const geoData = await geoRes.json();
-                            if (!controller.signal.aborted) {
-                                setAutoAddresses(geoData.suggestions || []);
-                            }
-                        }
+                    if (geoRes.ok) {
+                        const geoData = await geoRes.json();
+                        setAutoAddresses(geoData.suggestions || []);
                     } else {
                         setAutoAddresses([]);
                     }
@@ -129,7 +126,7 @@ export function CafeSidebar({
                         setIsAutoSearching(false);
                     }
                 }
-            }, 100);
+            }, 50);
         },
         [userLocation]
     );
