@@ -45,6 +45,7 @@ export default function RatingPanel({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
@@ -203,8 +204,8 @@ export default function RatingPanel({
           overall_rating: calculateOverallRating(payload),
         };
 
-        // Update user rating
-        queryClient.setQueryData(['user-rating', cafe.id, user.id], {
+        // Update user rating — use user?.id to match query key definition
+        queryClient.setQueryData(['user-rating', cafe.id, user?.id], {
           hasRated: true,
           rating: optimisticRating,
         });
@@ -236,10 +237,12 @@ export default function RatingPanel({
       }
       setError(err instanceof Error ? err.message : 'Failed to submit rating');
     },
-    onSuccess: () => {
-      // ✅ Invalidate queries to refetch fresh data
-      queryClient.invalidateQueries({ queryKey: ['cafe-ratings', cafe.id] });
-      queryClient.invalidateQueries({ queryKey: ['user-rating', cafe.id, user?.id] });
+    onSuccess: async () => {
+      // ✅ Await invalidation to ensure fresh data is fetched before UI updates
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['cafe-ratings', cafe.id] }),
+        queryClient.invalidateQueries({ queryKey: ['user-rating', cafe.id, user?.id] }),
+      ]);
 
       setSuccessMessage(userRating ? 'Rating updated!' : 'Rating submitted!');
       setIsEditing(false);
@@ -302,10 +305,12 @@ export default function RatingPanel({
       }
       setError(err instanceof Error ? err.message : 'Failed to delete rating');
     },
-    onSuccess: () => {
-      // Invalidate queries to refetch fresh data
-      queryClient.invalidateQueries({ queryKey: ['cafe-ratings', cafe.id] });
-      queryClient.invalidateQueries({ queryKey: ['user-rating', cafe.id, user?.id] });
+    onSuccess: async () => {
+      // Await invalidation to ensure fresh data is fetched
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['cafe-ratings', cafe.id] }),
+        queryClient.invalidateQueries({ queryKey: ['user-rating', cafe.id, user?.id] }),
+      ]);
 
       setSuccessMessage('Rating deleted!');
       setIsEditing(false);
@@ -413,7 +418,7 @@ export default function RatingPanel({
   const headerContent = (
     <>
       {/* Photo Carousel Section - smaller on mobile */}
-      <div className="h-[10vh] md:h-[15vh] flex items-center justify-center bg-gray-50 border-b-2 border-c2c-orange relative">
+      <div className="h-[20vh] md:h-[15vh] flex items-center justify-center bg-gray-50 border-b-2 border-c2c-orange relative">
         <ImageCarousel
           images={allPhotos}
           fallbackImage="/assets/c2c-icon.webp"
@@ -713,6 +718,7 @@ export default function RatingPanel({
                     ratingId={userRating?.id}
                     existingImages={formData.photos || []}
                     onImagesChange={handleImagesChange}
+                    onUploadingChange={setIsUploading}
                     maxImages={10}
                     disabled={!user}
                   />
@@ -728,10 +734,12 @@ export default function RatingPanel({
                 <div className="flex flex-col md:flex-row gap-2 mt-4">
                   <button
                     onClick={handleSubmit}
-                    disabled={!user || submitMutation.isPending}
+                    disabled={!user || submitMutation.isPending || isUploading}
                     className="flex-1 bg-c2c-orange hover:bg-c2c-orange-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-all text-sm font-medium min-h-[44px]"
                   >
-                    {submitMutation.isPending
+                    {isUploading
+                      ? 'Uploading photos...'
+                      : submitMutation.isPending
                       ? 'Submitting...'
                       : userRating
                       ? 'Update Rating'
