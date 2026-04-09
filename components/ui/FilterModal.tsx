@@ -42,7 +42,7 @@ export function FilterModal({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Filter Search Results">
-      <div className="space-y-6 max-h-[70vh] overflow-y-auto">
+      <div className="space-y-6 max-h-[70dvh] overflow-y-auto">
         {/* Distance Filter */}
         <div>
           <label className="block text-sm font-bold text-gray-900 mb-2">

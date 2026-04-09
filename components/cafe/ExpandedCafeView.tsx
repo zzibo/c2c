@@ -40,6 +40,7 @@ export default function ExpandedCafeView({
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -213,7 +214,7 @@ export default function ExpandedCafeView({
           overall_rating: calculateOverallRating(payload),
         };
 
-        queryClient.setQueryData(['user-rating', cafe.id, user.id], {
+        queryClient.setQueryData(['user-rating', cafe.id, user?.id], {
           hasRated: true,
           rating: optimisticRating,
         });
@@ -243,9 +244,11 @@ export default function ExpandedCafeView({
       }
       setError(err instanceof Error ? err.message : 'Failed to submit rating');
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cafe-ratings', cafe.id] });
-      queryClient.invalidateQueries({ queryKey: ['user-rating', cafe.id, user?.id] });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['cafe-ratings', cafe.id] }),
+        queryClient.invalidateQueries({ queryKey: ['user-rating', cafe.id, user?.id] }),
+      ]);
 
       setSuccessMessage(userRating ? 'Rating updated!' : 'Rating submitted!');
       setIsEditing(false);
@@ -592,6 +595,7 @@ export default function ExpandedCafeView({
                                 ratingId={userRating?.id}
                                 existingImages={formData.photos || []}
                                 onImagesChange={handleImagesChange}
+                                onUploadingChange={setIsUploading}
                                 maxImages={10}
                                 disabled={!user}
                               />
@@ -606,10 +610,12 @@ export default function ExpandedCafeView({
                             <div className="flex flex-col md:flex-row gap-3 mt-6">
                               <button
                                 onClick={handleSubmit}
-                                disabled={!user || submitMutation.isPending}
+                                disabled={!user || submitMutation.isPending || isUploading}
                                 className="flex-1 bg-c2c-orange hover:bg-c2c-orange-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg transition-all text-sm font-medium min-h-[44px]"
                               >
-                                {submitMutation.isPending
+                                {isUploading
+                                  ? 'Uploading photos...'
+                                  : submitMutation.isPending
                                   ? 'Submitting...'
                                   : userRating
                                   ? 'Update Rating'
