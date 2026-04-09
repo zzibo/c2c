@@ -158,15 +158,20 @@ async function findExistingCafeFallback(
 
 /**
  * Create a new cafe in the database from scraped data
+ * Uses the user's pin location as the authoritative source — the user physically
+ * placed it on the map, so it's more reliable than coordinates parsed from URLs.
+ * Falls back to scraped coordinates if no pin location is provided.
  */
-export async function createCafe(scrapedData: ScrapedCafeData): Promise<string> {
+export async function createCafe(scrapedData: ScrapedCafeData, userPinLocation?: Coordinate): Promise<string> {
+  const location = userPinLocation ?? scrapedData.location;
+
   const { data, error } = await supabaseAdmin
     .from('cafes')
     .insert({
       geoapify_place_id: `agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name: scrapedData.name,
       address: scrapedData.address,
-      location: `POINT(${scrapedData.location.lng} ${scrapedData.location.lat})`,
+      location: `POINT(${location.lng} ${location.lat})`,
       phone: scrapedData.phone || null,
       website: scrapedData.website || null,
       user_photos: scrapedData.photos,
@@ -333,7 +338,7 @@ export async function processSubmission(
     if (claudeDecision.approve) {
       let cafeId: string | undefined;
       if (!config.dryRun) {
-        cafeId = await createCafe(scrapedData);
+        cafeId = await createCafe(scrapedData, parsed.location);
         await updateSubmissionStatus(
           submission.id,
           'approved',
