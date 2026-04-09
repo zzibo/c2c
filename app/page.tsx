@@ -7,7 +7,7 @@ import { useOnboarding } from '@/hooks/useOnboarding';
 const MapView = dynamic(() => import('@/components/map/MapView'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-screen flex items-center justify-center bg-gray-100">
+    <div className="w-full h-dvh flex items-center justify-center bg-gray-100">
       <div className="text-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
         <p className="text-gray-600">Loading map...</p>
@@ -23,7 +23,7 @@ export default function Home() {
 
   if (!MAPBOX_TOKEN) {
     return (
-      <div className="w-full h-screen flex items-center justify-center bg-gray-100">
+      <div className="w-full h-dvh flex items-center justify-center bg-gray-100">
         <div className="max-w-md p-8 bg-white rounded-lg shadow-lg">
           <h1 className="text-2xl font-bold text-red-600 mb-4">Missing Mapbox Token</h1>
           <p className="text-gray-700 mb-4">
@@ -45,7 +45,7 @@ export default function Home() {
   }
 
   return (
-    <main className="w-full h-screen">
+    <main className="w-full h-dvh">
       <div className="w-full h-full">
         <MapView apiKey={MAPBOX_TOKEN} />
       </div>
