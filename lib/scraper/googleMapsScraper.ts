@@ -191,33 +191,52 @@ export async function scrapeGoogleMaps(url: string): Promise<GoogleMapsCafeData>
  * - !3d[lat]!4d[lng] = ACTUAL place marker coordinates (preferred)
  * - @lat,lng = Map viewport center (fallback, less accurate)
  */
+/**
+ * Validates that coordinates are plausible geographic values
+ */
+function isValidCoordinate(lat: number, lng: number): boolean {
+  return (
+    !isNaN(lat) && !isNaN(lng) &&
+    lat >= -90 && lat <= 90 &&
+    lng >= -180 && lng <= 180 &&
+    // Reject (0, 0) — Null Island, almost certainly a parsing error
+    !(lat === 0 && lng === 0)
+  );
+}
+
 function extractCoordinatesFromUrl(url: string): { lat: number; lng: number } | null {
   try {
     // Format 1 (PREFERRED): !3d[lat]!4d[lng] - actual place coordinates
     const exclamationMatch = url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
     if (exclamationMatch) {
-      return {
-        lat: parseFloat(exclamationMatch[1]),
-        lng: parseFloat(exclamationMatch[2]),
-      };
+      const lat = parseFloat(exclamationMatch[1]);
+      const lng = parseFloat(exclamationMatch[2]);
+      if (isValidCoordinate(lat, lng)) {
+        return { lat, lng };
+      }
+      console.warn(`Invalid coordinates from !3d/!4d: ${lat}, ${lng}`);
     }
 
     // Format 2 (FALLBACK): @lat,lng,zoom - map center (less accurate)
     const atMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
     if (atMatch) {
-      return {
-        lat: parseFloat(atMatch[1]),
-        lng: parseFloat(atMatch[2]),
-      };
+      const lat = parseFloat(atMatch[1]);
+      const lng = parseFloat(atMatch[2]);
+      if (isValidCoordinate(lat, lng)) {
+        return { lat, lng };
+      }
+      console.warn(`Invalid coordinates from @: ${lat}, ${lng}`);
     }
 
     // Format 3: ?q=lat,lng
     const qMatch = url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
     if (qMatch) {
-      return {
-        lat: parseFloat(qMatch[1]),
-        lng: parseFloat(qMatch[2]),
-      };
+      const lat = parseFloat(qMatch[1]);
+      const lng = parseFloat(qMatch[2]);
+      if (isValidCoordinate(lat, lng)) {
+        return { lat, lng };
+      }
+      console.warn(`Invalid coordinates from q=: ${lat}, ${lng}`);
     }
 
     return null;
