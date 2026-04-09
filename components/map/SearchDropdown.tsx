@@ -70,7 +70,7 @@ export function SearchDropdown({
               key={cafe.id}
               type="button"
               onClick={() => onSelectCafe(cafe)}
-              className="w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors flex items-start gap-2"
+              className="w-full text-left px-3 py-3 hover:bg-gray-50 transition-colors flex items-start gap-2 min-h-[44px]"
             >
               <span className="text-c2c-orange mt-0.5 shrink-0">&#9749;</span>
               <div className="min-w-0">
@@ -112,7 +112,7 @@ export function SearchDropdown({
               key={`addr-${i}`}
               type="button"
               onClick={() => onSelectAddress(addr)}
-              className="w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors flex items-start gap-2"
+              className="w-full text-left px-3 py-3 hover:bg-gray-50 transition-colors flex items-start gap-2 min-h-[44px]"
             >
               <MapPin size={14} className="text-gray-500 mt-0.5 shrink-0" />
               <span className="text-sm text-gray-700 truncate">{addr.label}</span>

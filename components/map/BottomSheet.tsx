@@ -195,7 +195,7 @@ export function BottomSheet({
       {/* Content - captures pointer events when scrolled to prevent drag conflict */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto overscroll-contain min-h-0"
+        className="flex-1 overflow-y-auto overscroll-contain min-h-0 pb-[env(safe-area-inset-bottom)]"
         style={{
           touchAction: 'pan-y', // Always allow vertical scrolling
           overscrollBehavior: 'contain', // Prevent parent scroll when at edges
