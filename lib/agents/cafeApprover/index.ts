@@ -157,13 +157,13 @@ async function findExistingCafeFallback(
 }
 
 /**
- * Create a new cafe in the database from scraped data
- * Uses the user's pin location as the authoritative source — the user physically
- * placed it on the map, so it's more reliable than coordinates parsed from URLs.
- * Falls back to scraped coordinates if no pin location is provided.
+ * Create a new cafe in the database from scraped data.
+ * Uses Google Maps coordinates (scrapedData.location) as the source of truth —
+ * the scraper now polls for precise !3d/!4d place coordinates instead of
+ * falling back to the unreliable @ viewport center.
  */
-export async function createCafe(scrapedData: ScrapedCafeData, userPinLocation?: Coordinate): Promise<string> {
-  const location = userPinLocation ?? scrapedData.location;
+export async function createCafe(scrapedData: ScrapedCafeData): Promise<string> {
+  const location = scrapedData.location;
 
   const { data, error } = await supabaseAdmin
     .from('cafes')
@@ -338,7 +338,7 @@ export async function processSubmission(
     if (claudeDecision.approve) {
       let cafeId: string | undefined;
       if (!config.dryRun) {
-        cafeId = await createCafe(scrapedData, parsed.location);
+        cafeId = await createCafe(scrapedData);
         await updateSubmissionStatus(
           submission.id,
           'approved',
