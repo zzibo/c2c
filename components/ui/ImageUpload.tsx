@@ -9,6 +9,7 @@ interface ImageUploadProps {
   ratingId?: string;
   existingImages?: string[];
   onImagesChange: (images: string[]) => void;
+  onUploadingChange?: (uploading: boolean) => void;
   maxImages?: number;
   disabled?: boolean;
 }
@@ -18,6 +19,7 @@ export function ImageUpload({
   ratingId,
   existingImages = [],
   onImagesChange,
+  onUploadingChange,
   maxImages = 5,
   disabled = false,
 }: ImageUploadProps) {
@@ -38,6 +40,7 @@ export function ImageUpload({
     const filesToUpload = Array.from(files).slice(0, remainingSlots);
     setError(null);
     setUploading(true);
+    onUploadingChange?.(true);
 
     try {
       const uploadPromises = filesToUpload.map(async (file) => {
@@ -79,6 +82,7 @@ export function ImageUpload({
       setError(err instanceof Error ? err.message : 'Failed to upload images');
     } finally {
       setUploading(false);
+      onUploadingChange?.(false);
       // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';

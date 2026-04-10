@@ -152,23 +152,50 @@ export async function scrapeGoogleMaps(url: string): Promise<GoogleMapsCafeData>
       return data as GoogleMapsCafeData;
     });
 
-    // Extract coordinates from the FINAL page URL (after redirects)
-    // Short URLs (maps.app.goo.gl) redirect to full URLs with coordinates
-    const finalUrl = await page.url();
-    console.log('Final URL after redirect:', finalUrl);
+    // Extract coordinates from page URL.
+    // Google Maps is a SPA — the !3d/!4d place coordinates are injected by
+    // client-side JS AFTER the page renders. page.url() right after navigation
+    // often only has @lat,lng (viewport center), which is unreliable.
+    // Poll until the precise !3d/!4d coordinates appear in the URL.
+    let coords: { lat: number; lng: number } | null = null;
+    const COORD_POLL_TIMEOUT = 8000;
+    const COORD_POLL_INTERVAL = 500;
+    const pollStart = Date.now();
 
-    const coords = extractCoordinatesFromUrl(finalUrl);
-    if (coords) {
-      cafeData.location = coords;
-    } else {
-      // Fallback: try original URL (in case it had coordinates)
-      const coordsFromOriginal = extractCoordinatesFromUrl(url);
-      if (coordsFromOriginal) {
-        cafeData.location = coordsFromOriginal;
-      } else {
-        throw new Error('Could not extract coordinates from Google Maps URL');
+    while (Date.now() - pollStart < COORD_POLL_TIMEOUT) {
+      const currentUrl = await page.url();
+      const precise = currentUrl.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+      if (precise) {
+        const lat = parseFloat(precise[1]);
+        const lng = parseFloat(precise[2]);
+        if (isValidCoordinate(lat, lng)) {
+          coords = { lat, lng };
+          console.log(`Got precise !3d/!4d coordinates from URL after ${Date.now() - pollStart}ms`);
+          break;
+        }
       }
+      await new Promise((r) => setTimeout(r, COORD_POLL_INTERVAL));
     }
+
+    // Fallback: try @lat,lng viewport center (less accurate but better than nothing)
+    if (!coords) {
+      const finalUrl = await page.url();
+      console.warn('No !3d/!4d in URL after polling, falling back to @ viewport coords');
+      console.log('Final URL:', finalUrl);
+
+      coords = extractCoordinatesFromUrl(finalUrl);
+    }
+
+    // Last resort: try original URL
+    if (!coords) {
+      coords = extractCoordinatesFromUrl(url);
+    }
+
+    if (!coords) {
+      throw new Error('Could not extract coordinates from Google Maps URL');
+    }
+
+    cafeData.location = coords;
 
     console.log('Scraped cafe data:', cafeData);
     return cafeData as GoogleMapsCafeData;
@@ -191,33 +218,52 @@ export async function scrapeGoogleMaps(url: string): Promise<GoogleMapsCafeData>
  * - !3d[lat]!4d[lng] = ACTUAL place marker coordinates (preferred)
  * - @lat,lng = Map viewport center (fallback, less accurate)
  */
+/**
+ * Validates that coordinates are plausible geographic values
+ */
+function isValidCoordinate(lat: number, lng: number): boolean {
+  return (
+    !isNaN(lat) && !isNaN(lng) &&
+    lat >= -90 && lat <= 90 &&
+    lng >= -180 && lng <= 180 &&
+    // Reject (0, 0) — Null Island, almost certainly a parsing error
+    !(lat === 0 && lng === 0)
+  );
+}
+
 function extractCoordinatesFromUrl(url: string): { lat: number; lng: number } | null {
   try {
     // Format 1 (PREFERRED): !3d[lat]!4d[lng] - actual place coordinates
     const exclamationMatch = url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
     if (exclamationMatch) {
-      return {
-        lat: parseFloat(exclamationMatch[1]),
-        lng: parseFloat(exclamationMatch[2]),
-      };
+      const lat = parseFloat(exclamationMatch[1]);
+      const lng = parseFloat(exclamationMatch[2]);
+      if (isValidCoordinate(lat, lng)) {
+        return { lat, lng };
+      }
+      console.warn(`Invalid coordinates from !3d/!4d: ${lat}, ${lng}`);
     }
 
     // Format 2 (FALLBACK): @lat,lng,zoom - map center (less accurate)
     const atMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
     if (atMatch) {
-      return {
-        lat: parseFloat(atMatch[1]),
-        lng: parseFloat(atMatch[2]),
-      };
+      const lat = parseFloat(atMatch[1]);
+      const lng = parseFloat(atMatch[2]);
+      if (isValidCoordinate(lat, lng)) {
+        return { lat, lng };
+      }
+      console.warn(`Invalid coordinates from @: ${lat}, ${lng}`);
     }
 
     // Format 3: ?q=lat,lng
     const qMatch = url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
     if (qMatch) {
-      return {
-        lat: parseFloat(qMatch[1]),
-        lng: parseFloat(qMatch[2]),
-      };
+      const lat = parseFloat(qMatch[1]);
+      const lng = parseFloat(qMatch[2]);
+      if (isValidCoordinate(lat, lng)) {
+        return { lat, lng };
+      }
+      console.warn(`Invalid coordinates from q=: ${lat}, ${lng}`);
     }
 
     return null;
