@@ -156,7 +156,7 @@ export function AppHeader() {
             </AnimatePresence>
 
             {/* Top-right controls */}
-            <div className="fixed top-4 right-4 md:top-6 md:right-8 lg:top-8 lg:right-16 z-50 flex items-center gap-2 md:gap-3">
+            <div className="fixed top-[max(1rem,env(safe-area-inset-top))] right-[max(1rem,env(safe-area-inset-right))] md:top-6 md:right-8 lg:top-8 lg:right-16 z-50 flex items-center gap-2 md:gap-3">
                 {/* Add Cafe button */}
                 <button
                     onClick={() => {

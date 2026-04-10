@@ -157,16 +157,21 @@ async function findExistingCafeFallback(
 }
 
 /**
- * Create a new cafe in the database from scraped data
+ * Create a new cafe in the database from scraped data.
+ * Uses Google Maps coordinates (scrapedData.location) as the source of truth —
+ * the scraper now polls for precise !3d/!4d place coordinates instead of
+ * falling back to the unreliable @ viewport center.
  */
 export async function createCafe(scrapedData: ScrapedCafeData): Promise<string> {
+  const location = scrapedData.location;
+
   const { data, error } = await supabaseAdmin
     .from('cafes')
     .insert({
       geoapify_place_id: `agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name: scrapedData.name,
       address: scrapedData.address,
-      location: `POINT(${scrapedData.location.lng} ${scrapedData.location.lat})`,
+      location: `POINT(${location.lng} ${location.lat})`,
       phone: scrapedData.phone || null,
       website: scrapedData.website || null,
       user_photos: scrapedData.photos,
